@@ -6,8 +6,6 @@ Built for **Power Platform administrators** who need to manage licensing complia
 
 > **Privacy**: All data processing happens entirely in your browser. No data is sent to any server or external service.
 
-![Main Screen](docs/screenshots/main%20screen%201.jpeg)
-
 ---
 
 ## Key Features
@@ -109,23 +107,39 @@ A sample file is included in the `data/` folder for reference.
 
 ## How to Use
 
-1. **Upload** — Select your report type and drag-and-drop (or browse) your PPAC export file
-2. **Summary Dashboard** — View KPIs: total users/flows analyzed, compliance rate, Premium/Process needs, and annual opportunity value
-3. **Users/Flows Table** — Search, filter, and sort the detail view. Click any row to drill down.
-4. **User Drill-Down** — See per-environment breakdown with daily usage heatmaps and trend charts showing capacity thresholds
-5. **Environment View** — Browse environment health cards with mini trend charts and non-compliant counts
-6. **Settings** — Adjust Premium ($15/mo default) and Process ($150/mo default) license pricing in USD or EUR
-7. **Export** — Download reports as Excel: Summary, Full Report (with Top 20 Premium, Top 10 Process, opportunity value), or filtered user detail
+### 1. Upload your data
 
-### Screenshots
+Select your report type and drag-and-drop (or browse) your PPAC export file (CSV or Excel). The app supports Licensed User, Non-Licensed User, and Per Flow report types.
 
-| User Details | User Drill-Down |
-|---|---|
-| ![User Details](docs/screenshots/User%20Details%201.jpg) | ![User Drill-Down](docs/screenshots/User%20Details%202.jpg) |
+![Upload Screen](docs/screenshots/main%20screen%201.jpeg)
 
-| Environment Details | Settings |
-|---|---|
-| ![Environment Details](docs/screenshots/Environment%20Details%201.jpg) | ![Settings](docs/screenshots/Settings.jpg) |
+### 2. Review the compliance matrix
+
+After upload, you land on the **Users/Flows overview**. The matrix at the top acts as both a summary and a filter — click any category to filter the table below. It shows at a glance which users are compliant and, for those who aren't, whether a **Premium** license would be sufficient or a full **Process** license is recommended.
+
+![User Overview](docs/screenshots/User%20Details%201.jpg)
+
+### 3. Drill down into individual users
+
+Click any user row to open a detailed popup. Here you see **usage over time** as a chart and a **per-environment table** below it. The environment breakdown is important: Process licenses cannot cover multiple environments, so you can identify exactly where the high consumption happens — even though the overall matrix doesn't split by environment yet.
+
+![User Drill-Down](docs/screenshots/User%20Details%202.jpg)
+
+### 4. Explore by environment
+
+Switch to the **Environment view** to analyze consumption at the environment level. Each card shows the environment health, non-compliant user counts, and a mini trend chart.
+
+![Environment Details](docs/screenshots/Environment%20Details%201.jpg)
+
+### 5. Configure pricing
+
+Open **Settings** to adjust the Premium and Process license prices (default: $15/mo and $150/mo) and toggle between USD and EUR. The opportunity forecast on the dashboard updates accordingly.
+
+![Settings](docs/screenshots/Settings.jpg)
+
+### 6. Export reports
+
+Download reports as Excel: Summary, Full Report (with Top 20 Premium, Top 10 Process, opportunity value), or filtered user detail — all with timestamped filenames.
 
 ---
 
