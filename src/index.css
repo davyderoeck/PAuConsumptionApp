@@ -1,0 +1,15 @@
+/* Global resets — App.css vars take over */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #0d1117;
+  color: #e6edf3;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+}
+
+a { color: #2f81f7; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+button { font-family: inherit; }
