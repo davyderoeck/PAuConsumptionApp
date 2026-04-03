@@ -110,46 +110,34 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
         </div>
         <div className="summary-kpis">
           {fileType === 'non-licensed' && nl ? (
-            /* ── Non-licensed: show pool-level KPIs instead of per-user compliance ── */
+            /* ── Non-licensed: 4 financial KPIs ── */
             <>
-              <div className="kpi-pill">
-                <span className="kpi-val">{s.usersAnalyzed.toLocaleString()}</span>
-                <span className="kpi-lbl">Callers</span>
+              <div className={`kpi-pill ${nl.overrun > 0 ? 'kpi-amber' : 'kpi-green'}`}>
+                <span className="kpi-val">
+                  {nl.addonCostMonthly > 0 ? `${fmtCur(nl.addonCostMonthly)}/mo` : nl.overrun > 0 ? 'Set price ⚙️' : '✓ $0'}
+                </span>
+                <span className="kpi-lbl">Add-on cost{nl.addonsCapped ? ' (max)' : ''}</span>
               </div>
-              <div className={`kpi-pill ${nl.overrun > 0 ? 'kpi-red' : 'kpi-green'}`}>
-                <span className="kpi-val">{fmtNum(nl.peakTenantRequests)}</span>
-                <span className="kpi-lbl">Peak req/day</span>
+              <div className={`kpi-pill ${nl.addonsCapped ? 'kpi-red' : ''}`}>
+                <span className="kpi-val">{nl.processLicensesNeeded > 0 ? nl.processLicensesNeeded : '—'}</span>
+                <span className="kpi-lbl">Process lic. needed</span>
               </div>
-              <div className={`kpi-pill ${nl.overrun > 0 ? 'kpi-red' : 'kpi-green'}`}>
-                <span className="kpi-val">{nl.overrun > 0 ? `+${fmtNum(nl.overrun)}` : '✓ 0'}</span>
-                <span className="kpi-lbl">Daily overrun</span>
+              <div className={`kpi-pill ${nl.addonsCapped ? 'kpi-red' : ''}`}>
+                <span className="kpi-val">
+                  {nl.processLicenseCostMonthly > 0
+                    ? `${fmtCur(nl.processLicenseCostMonthly)}/mo`
+                    : nl.addonsCapped ? 'Set price ⚙️' : '—'}
+                </span>
+                <span className="kpi-lbl">Process lic. cost</span>
               </div>
-              {nl.overrun > 0 && (
-                <div className="kpi-pill kpi-amber">
-                  <span className="kpi-val">{fmtCur(nl.addonCostMonthly > 0 ? nl.addonCostMonthly : 0)}/mo</span>
-                  <span className="kpi-lbl">Add-on cost{nl.addonsCapped ? ' (max)' : ''}</span>
-                </div>
-              )}
-              {nl.addonsCapped && (
-                <div className="kpi-pill kpi-red">
-                  <span className="kpi-val">{nl.processLicensesNeeded}</span>
-                  <span className="kpi-lbl">Process lic. needed</span>
-                </div>
-              )}
-              {nl.addonsCapped && (
-                <div className="kpi-pill kpi-red">
-                  <span className="kpi-val">
-                    {nl.processLicenseCostMonthly > 0 ? `${fmtCur(nl.processLicenseCostMonthly)}/mo` : 'Set price ⚙️'}
-                  </span>
-                  <span className="kpi-lbl">Process lic. cost</span>
-                </div>
-              )}
-              {(nl.addonCostMonthly > 0 || nl.processLicenseCostMonthly > 0) && (
-                <div className="kpi-pill kpi-accent">
-                  <span className="kpi-val">{fmtCur((nl.addonCostMonthly + nl.processLicenseCostMonthly) * 12)}/yr</span>
-                  <span className="kpi-lbl">Total annual cost</span>
-                </div>
-              )}
+              <div className="kpi-pill kpi-accent">
+                <span className="kpi-val">
+                  {(nl.addonCostMonthly + nl.processLicenseCostMonthly) > 0
+                    ? `${fmtCur((nl.addonCostMonthly + nl.processLicenseCostMonthly) * 12)}/yr`
+                    : nl.overrun > 0 ? 'Set prices ⚙️' : '✓ $0'}
+                </span>
+                <span className="kpi-lbl">Total annual cost</span>
+              </div>
             </>
           ) : (
             /* ── Per-user / per-flow: compliance KPIs ── */
