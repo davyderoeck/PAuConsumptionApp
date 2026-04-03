@@ -25,3 +25,6 @@ dist-ssr
 
 # Power Apps local config (contains personal environment/app IDs)
 power.config.json
+
+# Local data exports (may contain tenant/org IDs and usage data)
+data/*.csv
