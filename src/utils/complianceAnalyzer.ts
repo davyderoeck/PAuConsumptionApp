@@ -47,20 +47,21 @@ export function analyzeConsumption(
   //   'warning' : tenantPool < cumulative ≤ D365_POOL_CAP → add-on zone (fixable with PPR add-ons)
   //   'overrun' : tenantPool < cum ... still ≤ D365_POOL_CAP (alias kept for compat) ← unused now
   //   'cap'     : cumulative > D365_POOL_CAP           → above 10M, needs Process license
-  if (fileType === 'non-licensed' && tenantPool && tenantPool > 0) {
+  if (fileType === 'non-licensed') {
+    const pool = tenantPool ?? 0;
     const asc = [...classified].sort((a, b) => a.peakDailyRequests - b.peakDailyRequests);
     let cumulative = 0;
     const statusMap = new Map<string, 'covered' | 'warning' | 'overrun' | 'cap'>();
     for (const u of asc) {
       cumulative += u.peakDailyRequests;
       const status: 'covered' | 'warning' | 'cap' =
-        cumulative <= tenantPool   ? 'covered'
+        cumulative <= pool         ? 'covered'
         : cumulative <= D365_POOL_CAP ? 'warning'
         : 'cap';
       statusMap.set(u.callerId, status);
     }
     classified = classified.map(u => {
-      const poolCoverageStatus = statusMap.get(u.callerId) ?? 'covered';
+      const poolCoverageStatus = statusMap.get(u.callerId) ?? (pool > 0 ? 'covered' : 'warning');
       if (poolCoverageStatus === 'covered') return { ...u, poolCoverageStatus };
       return {
         ...u,
