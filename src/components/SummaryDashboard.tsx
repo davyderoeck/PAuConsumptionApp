@@ -49,28 +49,12 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
 
   const nl = nonLicensedAnalysis;
 
-  // ── Pool gauge arc computation (non-licensed) ────────────────────────────
+  // ── Pool gauge data (non-licensed) ──────────────────────────────────────
   const poolRawPct    = nl && nl.tenantPool > 0 ? nl.peakTenantRequests / nl.tenantPool : 0;
   const isOverrunGauge = nl ? nl.overrun > 0 : false;
   const poolFillClr   = isOverrunGauge ? '#da3633' : poolRawPct > 0.8 ? '#d29922' : '#3fb950';
-
-  // Arc: when overrun the full semicircle represents peak (green = pool share, red = overrun share).
-  // When no overrun the arc fills proportionally into a pool-sized semicircle.
-  const greenArcFrac = isOverrunGauge && nl
-    ? nl.tenantPool / nl.peakTenantRequests   // pool / peak → covered fraction
-    : Math.min(poolRawPct, 0.9999);           // usage / pool → fill fraction
-
-  const gAngle    = Math.PI * Math.min(greenArcFrac, 0.9999);
-  const gEndX     = (100 - 80 * Math.cos(gAngle)).toFixed(2);
-  const gEndY     = (100 - 80 * Math.sin(gAngle)).toFixed(2);
-  const gLargeArc = greenArcFrac > 0.5 ? 1 : 0;
-  // Red arc continues from green endpoint to full-arc end (180, 100)
-  const rLargeArc = (1 - greenArcFrac) > 0.5 ? 1 : 0;
-
-  // Horizontal bar fractions (relative to peak when overrun, relative to pool otherwise)
-  const barGreenPct  = isOverrunGauge && nl ? (nl.tenantPool  / nl.peakTenantRequests) * 100 : Math.min(poolRawPct * 100, 100);
-  const barRedPct    = isOverrunGauge && nl ? (nl.overrun     / nl.peakTenantRequests) * 100 : 0;
-  const barEmptyPct  = !isOverrunGauge ? Math.max(0, 100 - barGreenPct) : 0;
+  const barGreenPct   = isOverrunGauge && nl ? (nl.tenantPool  / nl.peakTenantRequests) * 100 : Math.min(poolRawPct * 100, 100);
+  const barRedPct     = isOverrunGauge && nl ? (nl.overrun     / nl.peakTenantRequests) * 100 : 0;
 
   // Build per-pattern breakdown
   const byPattern: Record<PatternKey, ClassifiedUser[]> = {
@@ -145,43 +129,11 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
 
       {/* ── Tenant pool gauge banner ── */}
       {fileType === 'non-licensed' && nl && nl.tenantPool > 0 && (
-        <div className={`pool-gauge-banner ${nl.overrun > 0 ? 'pool-gauge-overrun' : nl.peakTenantRequests / nl.tenantPool > 0.8 ? 'pool-gauge-warning' : 'pool-gauge-ok'}`}>
-          <div className="pool-gauge-semi">
-            <svg viewBox="0 0 200 108" className="pool-gauge-svg">
-              {/* Track */}
-              <path d="M 20 100 A 80 80 0 0 0 180 100" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="14" strokeLinecap="round"/>
-              {/* Green arc: covered/entitled portion */}
-              {greenArcFrac > 0.001 && (
-                <path
-                  d={`M 20 100 A 80 80 0 ${gLargeArc} 0 ${gEndX} ${gEndY}`}
-                  fill="none" stroke="#3fb950" strokeWidth="14" strokeLinecap={isOverrunGauge ? 'butt' : 'round'}
-                />
-              )}
-              {/* Red arc: overrun portion (continues from green end to full arc) */}
-              {isOverrunGauge && (
-                <path
-                  d={`M ${gEndX} ${gEndY} A 80 80 0 ${rLargeArc} 0 180 100`}
-                  fill="none" stroke="#da3633" strokeWidth="14" strokeLinecap="round"
-                />
-              )}
-              {/* Pool cap tick mark when overrun */}
-              {isOverrunGauge && (
-                <line
-                  x1={(100 - 73 * Math.cos(gAngle)).toFixed(2)} y1={(100 - 73 * Math.sin(gAngle)).toFixed(2)}
-                  x2={(100 - 87 * Math.cos(gAngle)).toFixed(2)} y2={(100 - 87 * Math.sin(gAngle)).toFixed(2)}
-                  stroke="white" strokeWidth="2" opacity="0.7"
-                />
-              )}
-              {/* Percentage label */}
-              <text x="100" y="74" textAnchor="middle" fill={poolFillClr} fontSize="24" fontWeight="700" fontFamily="inherit">
-                {`${(poolRawPct * 100).toFixed(1)}%`}
-              </text>
-              <text x="100" y="91" textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize="10" fontFamily="inherit">
-                of pool used
-              </text>
-              <text x="18" y="108" textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="9" fontFamily="inherit">0</text>
-              <text x="182" y="108" textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="9" fontFamily="inherit">100%</text>
-            </svg>
+        <div className={`pool-gauge-banner ${nl.overrun > 0 ? 'pool-gauge-overrun' : poolRawPct > 0.8 ? 'pool-gauge-warning' : 'pool-gauge-ok'}`}>
+          {/* Big percentage */}
+          <div className="pool-gauge-pct" style={{ color: poolFillClr }}>
+            {`${(poolRawPct * 100).toFixed(1)}%`}
+            <span className="pool-gauge-pct-lbl">of pool used</span>
           </div>
 
           <div className="pool-gauge-info">
@@ -205,16 +157,10 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
             </div>
 
             {/* Horizontal bar */}
-            <div className="pool-gauge-bar" style={{ position: 'relative' }}>
-              {/* Green: entitled / covered portion */}
+            <div className="pool-gauge-bar">
               <div className="pool-gauge-fill" style={{ width: `${barGreenPct}%`, background: '#3fb950', borderRadius: isOverrunGauge ? '4px 0 0 4px' : 4 }} />
-              {/* Red: overrun portion */}
               {isOverrunGauge && barRedPct > 0 && (
                 <div className="pool-gauge-fill" style={{ width: `${barRedPct}%`, background: '#da3633', borderRadius: '0 4px 4px 0' }} />
-              )}
-              {/* Grey: unused portion (no overrun) */}
-              {!isOverrunGauge && barEmptyPct > 0 && (
-                <div style={{ width: `${barEmptyPct}%` }} />
               )}
             </div>
             <div className="pool-gauge-bar-labels">
