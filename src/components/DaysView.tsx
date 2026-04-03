@@ -101,7 +101,7 @@ export default function DaysView({ analysis: nl, rawRows, addonPrice, processPri
 
   // Per-day 10M-aware cost calculations (drill-down)
   const dayOverrunForAddons = Math.max(0, Math.min(dayTotal, D365_POOL_CAP) - nl.tenantPool);
-  const dayAddonsNeeded = dayOverrunForAddons > 0 ? Math.ceil(dayOverrunForAddons / REQUEST_ADDON_CAPACITY) : 0;
+  const dayAddonsNeeded = dayOverrunForAddons > 0 ? Math.min(Math.ceil(dayOverrunForAddons / REQUEST_ADDON_CAPACITY), nl.addonsAvailable) : 0;
   const dayAddonCost = addonPrice > 0 && dayAddonsNeeded > 0 ? dayAddonsNeeded * addonPrice : null;
   const dayExcessAbove10M = Math.max(0, dayTotal - D365_POOL_CAP);
   const dayProcessLicNeeded = dayExcessAbove10M > 0 ? Math.ceil(dayExcessAbove10M / PROCESS_CAPACITY_UNIT) : 0;
@@ -301,7 +301,7 @@ export default function DaysView({ analysis: nl, rawRows, addonPrice, processPri
 
                   // Add-on cost: only for overrun between pool and 10M cap
                   const dayOverrunForAddons = Math.max(0, Math.min(day.requests, D365_POOL_CAP) - nl.tenantPool);
-                  const dayAddonsNeededRow = dayOverrunForAddons > 0 ? Math.ceil(dayOverrunForAddons / REQUEST_ADDON_CAPACITY) : 0;
+                  const dayAddonsNeededRow = dayOverrunForAddons > 0 ? Math.min(Math.ceil(dayOverrunForAddons / REQUEST_ADDON_CAPACITY), nl.addonsAvailable) : 0;
                   const dayAddonCostRow = dayAddonsNeededRow * addonPrice;
 
                   // Process cost: only for overrun above 10M cap
