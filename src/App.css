@@ -2143,3 +2143,37 @@ tbody td {
 .ct-tag-flow { background: rgba(47,129,247,0.15); color: #58a6ff; }
 .ct-tag-user { background: rgba(63,185,80,0.12); color: var(--green); }
 .ct-tag-nl   { background: rgba(163,113,247,0.15); color: #c9a6ff; }
+
+/* ── Combined: confidence split ─────────────────────────── */
+.combined-monitor-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+}
+.combined-monitor-hint {
+  font-size: 0.72em;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Confidence legend row */
+.combined-confidence-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+.cleg-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.8em;
+  color: var(--text-muted);
+}
+.cleg-item strong { color: var(--text); }

@@ -23,10 +23,15 @@ export default function CombinedSummary({ loadedFiles, premiumPrice, processPric
   // but their peak usage (≤40k req/day) could be covered by a Premium user license.
   const downgradableFlows  = perFlowFile?.users.filter(u => u.recommendation === 'Downgrade to Premium') ?? []
   const downgradableCount  = downgradableFlows.length
-  // Flows that genuinely need Process licenses (peak >250k req/day), cannot be downgraded
-  const perFlowProcessNeeded = perFlowFile?.users
-    .filter(u => u.recommendation === 'Process')
-    .reduce((s, u) => s + u.totalProcessLicensesRequired, 0) ?? 0
+  // Flows needing Process — split by frequency confidence
+  const perFlowProcessFlows = perFlowFile?.users.filter(u => u.recommendation === 'Process') ?? []
+  const perFlowProcessConfirmed = perFlowProcessFlows
+    .filter(u => u.frequencyLabel === 'License recommended')
+    .reduce((s, u) => s + u.totalProcessLicensesRequired, 0)
+  const perFlowProcessMonitor = perFlowProcessFlows
+    .filter(u => u.frequencyLabel !== 'License recommended')
+    .reduce((s, u) => s + u.totalProcessLicensesRequired, 0)
+  const perFlowProcessNeeded = perFlowProcessConfirmed + perFlowProcessMonitor
 
   // ── Non-Licensed ─────────────────────────────────────────
   const nlProcessNeeded  = nlFile?.nonLicensedAnalysis?.processLicensesNeeded ?? 0
@@ -42,11 +47,24 @@ export default function CombinedSummary({ loadedFiles, premiumPrice, processPric
   // Each downgraded flow needs a Premium user license instead
   const premiumForDowngradedFlows = reuseableProcessLicenses
 
-  // ── Licensed Users ────────────────────────────────────────
-  const licProcessNeeded = licensedFile?.summary.totalProcessLicensesRequired ?? 0
+  // ── Licensed Users — split by frequency ──────────────────
+  const licProcessUsers = licensedFile?.users.filter(u => u.totalProcessLicensesRequired > 0) ?? []
+  const licProcessConfirmed = licProcessUsers
+    .filter(u => u.frequencyLabel === 'License recommended' || u.frequencyLabel === 'Moderate pattern')
+    .reduce((s, u) => s + u.totalProcessLicensesRequired, 0)
+  const licProcessMonitor = licProcessUsers
+    .filter(u => u.frequencyLabel !== 'License recommended' && u.frequencyLabel !== 'Moderate pattern')
+    .reduce((s, u) => s + u.totalProcessLicensesRequired, 0)
+  const licProcessNeeded = licProcessConfirmed + licProcessMonitor
   const licPremiumNeeded = licensedFile?.summary.additionalPremiumLicensesRequired ?? 0
 
-  // ── Totals ────────────────────────────────────────────────
+  // ── Confidence totals ─────────────────────────────────────
+  // "Confirmed" = recurring usage — definitely needs the license
+  // "Monitor"   = occasional/moderate pattern — may not need permanent license
+  const confirmedProcess = perFlowProcessConfirmed + netNewProcessForNL + licProcessConfirmed
+  const monitorProcess   = perFlowProcessMonitor + licProcessMonitor
+
+  // ── Grand Totals ──────────────────────────────────────────
   const totalNewProcess  = netNewProcessForNL + perFlowProcessNeeded + licProcessNeeded
   const totalNewPremium  = licPremiumNeeded + premiumForDowngradedFlows
   const totalProcessCostMo = totalNewProcess * processPrice
@@ -80,10 +98,17 @@ export default function CombinedSummary({ loadedFiles, premiumPrice, processPric
           <span className="combined-kpi-sub">{fmt(totalPremiumCostMo, currency)}/mo</span>
         </div>
         <div className="combined-kpi">
-          <span className="combined-kpi-value combined-kpi-red">{fmtN(totalNewProcess)}</span>
-          <span className="combined-kpi-label">PROCESS LIC. NEEDED</span>
-          <span className="combined-kpi-sub">{fmt(totalProcessCostMo, currency)}/mo</span>
+          <span className="combined-kpi-value combined-kpi-red">{fmtN(confirmedProcess)}</span>
+          <span className="combined-kpi-label">PROCESS — CONFIRMED</span>
+          <span className="combined-kpi-sub">{fmt(confirmedProcess * processPrice, currency)}/mo · recurring pattern</span>
         </div>
+        {monitorProcess > 0 && (
+          <div className="combined-kpi">
+            <span className="combined-kpi-value combined-kpi-amber">{fmtN(monitorProcess)}</span>
+            <span className="combined-kpi-label">PROCESS — MONITOR</span>
+            <span className="combined-kpi-sub">{fmt(monitorProcess * processPrice, currency)}/mo · occasional only</span>
+          </div>
+        )}
         {nlFile && (
           <div className="combined-kpi">
             <span className="combined-kpi-value combined-kpi-amber">{fmtN(nlAddonsNeeded)}</span>
@@ -146,7 +171,8 @@ export default function CombinedSummary({ loadedFiles, premiumPrice, processPric
             <tr>
               <th>SOURCE</th>
               <th>FILE</th>
-              <th className="num-col">PROCESS LIC.</th>
+              <th className="num-col">PROCESS — CONFIRMED</th>
+              <th className="num-col">PROCESS — MONITOR</th>
               <th className="num-col">PREMIUM LIC.</th>
               <th className="num-col">ADD-ONS</th>
               <th className="num-col">MONTHLY COST</th>
@@ -159,8 +185,16 @@ export default function CombinedSummary({ loadedFiles, premiumPrice, processPric
                 <td><span className="ct-tag ct-tag-flow">⚡ Per-Flow</span></td>
                 <td className="combined-filename" title={perFlowFile.fileName}>{perFlowFile.fileName}</td>
                 <td className="num-col">
-                  {perFlowProcessNeeded > 0
-                    ? <span className="badge badge-non-compliant">{fmtN(perFlowProcessNeeded)}</span>
+                  {perFlowProcessConfirmed > 0
+                    ? <span className="badge badge-non-compliant">{fmtN(perFlowProcessConfirmed)}</span>
+                    : <span className="muted">—</span>}
+                </td>
+                <td className="num-col">
+                  {perFlowProcessMonitor > 0
+                    ? <div className="combined-monitor-cell">
+                        <span className="badge badge-warning">{fmtN(perFlowProcessMonitor)}</span>
+                        <span className="combined-monitor-hint">moderate / occasional</span>
+                      </div>
                     : <span className="muted">—</span>}
                 </td>
                 <td className="num-col">
@@ -190,6 +224,7 @@ export default function CombinedSummary({ loadedFiles, premiumPrice, processPric
                     )}
                   </div>
                 </td>
+                <td className="num-col"><span className="muted">—</span><span className="combined-monitor-hint">tenant pool overrun — mandatory</span></td>
                 <td className="num-col"><span className="muted">—</span></td>
                 <td className="num-col">
                   {nlAddonsNeeded > 0
@@ -205,8 +240,16 @@ export default function CombinedSummary({ loadedFiles, premiumPrice, processPric
                 <td><span className="ct-tag ct-tag-user">👥 Licensed Users</span></td>
                 <td className="combined-filename" title={licensedFile.fileName}>{licensedFile.fileName}</td>
                 <td className="num-col">
-                  {licProcessNeeded > 0
-                    ? <span className="badge badge-non-compliant">{fmtN(licProcessNeeded)}</span>
+                  {licProcessConfirmed > 0
+                    ? <span className="badge badge-non-compliant">{fmtN(licProcessConfirmed)}</span>
+                    : <span className="muted">—</span>}
+                </td>
+                <td className="num-col">
+                  {licProcessMonitor > 0
+                    ? <div className="combined-monitor-cell">
+                        <span className="badge badge-warning">{fmtN(licProcessMonitor)}</span>
+                        <span className="combined-monitor-hint">occasional only — monitor</span>
+                      </div>
                     : <span className="muted">—</span>}
                 </td>
                 <td className="num-col">
@@ -221,7 +264,8 @@ export default function CombinedSummary({ loadedFiles, premiumPrice, processPric
             )}
             <tr className="combined-total-row">
               <td colSpan={2}><strong>Total</strong></td>
-              <td className="num-col"><strong>{fmtN(totalNewProcess)}</strong></td>
+              <td className="num-col"><strong>{fmtN(confirmedProcess)}</strong></td>
+              <td className="num-col"><strong className="combined-kpi-amber">{monitorProcess > 0 ? fmtN(monitorProcess) : '—'}</strong></td>
               <td className="num-col"><strong>{fmtN(totalNewPremium)}</strong></td>
               <td className="num-col"><strong>{nlAddonsNeeded > 0 ? fmtN(nlAddonsNeeded) : '—'}</strong></td>
               <td className="num-col"><strong>{fmt(totalMonthlyCost, currency)}/mo</strong></td>
@@ -229,6 +273,12 @@ export default function CombinedSummary({ loadedFiles, premiumPrice, processPric
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div className="combined-confidence-legend">
+        <span className="cleg-item"><span className="badge badge-non-compliant">N</span> <strong>Confirmed</strong> — recurring pattern (≥40 % of days above threshold). License purchase strongly recommended.</span>
+        <span className="cleg-item"><span className="badge badge-warning">N</span> <strong>Monitor first</strong> — moderate or occasional spikes (&lt;40 % of days). Assess trend before purchasing.</span>
+        <span className="cleg-item"><span className="combined-reuse-tag">♻ reused</span> Freed Process slots reallocated from downgraded per-flow flows — no new license needed.</span>
       </div>
 
       <p className="combined-note">
