@@ -130,11 +130,22 @@ export interface NonLicensedTenantAnalysis {
   peakTenantDay: string;
   peakTenantRequests: number;
   dailyTotals: { date: string; requests: number }[];
+  /** req/day above current pool (before add-ons) */
   overrun: number;
-  /** PP Request add-ons needed to cover overrun (50k/add-on) */
+  /** PP Request add-ons needed — capped so total pool stays ≤ D365_POOL_CAP (10M) */
   addonsNeeded: number;
   /** Monthly cost to cover overrun with add-ons */
   addonCostMonthly: number;
+  /** Maximum add-ons purchasable before hitting the 10M platform cap */
+  addonsAvailable: number;
+  /** True when peak consumption exceeds D365_POOL_CAP (10M) — add-ons alone can't fix this */
+  addonsCapped: boolean;
+  /** req/day above the 10M platform cap — must be covered by Power Automate Process licenses */
+  excessAbove10M: number;
+  /** Process licenses needed to cover excessAbove10M (each covers 250k req/day) */
+  processLicensesNeeded: number;
+  /** Monthly cost for processLicensesNeeded (0 when no processLicensePrice provided) */
+  processLicenseCostMonthly: number;
   /** Top callers by peak daily usage — candidates for Process licenses to remove from pool */
   topCallers: {
     callerId: string;

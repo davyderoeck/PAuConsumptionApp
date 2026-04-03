@@ -82,7 +82,7 @@ function App() {
 
       // Tenant-level analysis for non-licensed callers
       const nlAnalysis = parseResult.fileType === 'non-licensed'
-        ? analyzeNonLicensedTenant(parseResult.rows, tenantPoolConfig, parseResult.tenantEntitlement)
+        ? analyzeNonLicensedTenant(parseResult.rows, tenantPoolConfig, parseResult.tenantEntitlement, processPrice)
         : null
 
       setProgress(100)
@@ -354,7 +354,7 @@ function App() {
             setTenantPoolConfig(cfg)
             // Re-run tenant analysis immediately when config changes
             if (fileType === 'non-licensed' && rawRows.length > 0) {
-              setNonLicensedAnalysis(analyzeNonLicensedTenant(rawRows, cfg, tenantEntitlement))
+              setNonLicensedAnalysis(analyzeNonLicensedTenant(rawRows, cfg, tenantEntitlement, processPrice))
             }
           }}
           onClose={() => setShowSettings(false)}

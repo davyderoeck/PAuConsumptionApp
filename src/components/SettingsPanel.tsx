@@ -116,13 +116,13 @@ export default function SettingsPanel({
               <div className="settings-divider" />
               <h3 className="settings-section-title">Non-Licensed Tenant Pool</h3>
               <p className="settings-hint">
-                The tenant pool size is read from the CSV file. Set the add-on price below
-                to estimate the cost of expanding the pool with <strong>PP Request capacity add-ons</strong> (each adds 50,000 req/day).
+                The tenant pool size is read from the CSV file. The platform hard-caps the non-licensed pool at <strong>10,000,000 req/day</strong> — add-ons can fill up to that ceiling only.
+                Consumption above 10M must use <strong>Power Automate Process licenses</strong> (set the Process price above to estimate that cost).
               </p>
               <div className="settings-field">
                 <label>PP Request capacity add-on (per add-on/mo)</label>
                 <p className="settings-hint" style={{ marginBottom: 4 }}>
-                  Enter 0 to skip cost estimation for this option.
+                  Each add-on gives +50,000 req/day to the shared tenant pool.
                 </p>
                 <div className="settings-input-wrap">
                   <span className="settings-currency">{sym}</span>

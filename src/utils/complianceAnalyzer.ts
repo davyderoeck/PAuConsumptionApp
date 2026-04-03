@@ -16,6 +16,7 @@ import {
   DEFAULT_PREMIUM_PRICE_MONTHLY,
   DEFAULT_PROCESS_PRICE_MONTHLY,
   REQUEST_ADDON_CAPACITY,
+  D365_POOL_CAP,
 } from '../types';
 
 const fmt = (n: number) => n >= 1_000_000
@@ -567,6 +568,7 @@ export function analyzeNonLicensedTenant(
   rows: RawApiRow[],
   config: TenantPoolConfig,
   csvEntitlement?: number,
+  processLicensePrice = 0,
 ): NonLicensedTenantAnalysis {
   const tenantPool = csvEntitlement ?? 0;
 
@@ -584,8 +586,24 @@ export function analyzeNonLicensedTenant(
   const peak = dailyTotals.reduce((best, d) => d.requests > best.requests ? d : best, emptyDay);
 
   const overrun = tenantPool > 0 ? Math.max(0, peak.requests - tenantPool) : 0;
-  const addonsNeeded = overrun > 0 ? Math.ceil(overrun / REQUEST_ADDON_CAPACITY) : 0;
+
+  // Add-ons fill from current pool up to the platform cap (10M max)
+  // Each add-on = 50k req/day. You cannot buy add-ons to push above D365_POOL_CAP.
+  const addonsAvailable = tenantPool < D365_POOL_CAP
+    ? Math.floor((D365_POOL_CAP - tenantPool) / REQUEST_ADDON_CAPACITY)
+    : 0;
+  const addonsNeeded = overrun > 0
+    ? Math.min(Math.ceil(overrun / REQUEST_ADDON_CAPACITY), addonsAvailable)
+    : 0;
   const addonCostMonthly = addonsNeeded * config.requestAddonPrice;
+
+  // Excess above the 10M platform cap — must be handled with Process licenses
+  const excessAbove10M = tenantPool > 0 ? Math.max(0, peak.requests - D365_POOL_CAP) : 0;
+  const addonsCapped = excessAbove10M > 0;
+  const processLicensesNeeded = excessAbove10M > 0
+    ? Math.ceil(excessAbove10M / PROCESS_CAPACITY_UNIT)
+    : 0;
+  const processLicenseCostMonthly = processLicensesNeeded * processLicensePrice;
 
   // --- Top callers by peak daily usage (Process license candidates) ---
   const callerMap = new Map<string, {
@@ -624,6 +642,11 @@ export function analyzeNonLicensedTenant(
     overrun,
     addonsNeeded,
     addonCostMonthly,
+    addonsAvailable,
+    addonsCapped,
+    excessAbove10M,
+    processLicensesNeeded,
+    processLicenseCostMonthly,
     topCallers,
   };
 }

@@ -194,13 +194,31 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
             {nl.overrun > 0 && (
               <div className="kpi-pill kpi-amber">
                 <span className="kpi-val">{nl.addonsNeeded}</span>
-                <span className="kpi-lbl">Add-ons needed</span>
+                <span className="kpi-lbl">Add-ons needed{nl.addonsCapped ? ' (max)' : ''}</span>
               </div>
             )}
             {nl.overrun > 0 && nl.addonCostMonthly > 0 && (
               <div className="kpi-pill kpi-accent">
                 <span className="kpi-val">{fmtCur(nl.addonCostMonthly)}/mo</span>
                 <span className="kpi-lbl">Add-on cost</span>
+              </div>
+            )}
+            {nl.addonsCapped && (
+              <div className="kpi-pill kpi-red">
+                <span className="kpi-val">+{fmtNum(nl.excessAbove10M)}</span>
+                <span className="kpi-lbl">Above 10M cap</span>
+              </div>
+            )}
+            {nl.addonsCapped && (
+              <div className="kpi-pill kpi-red">
+                <span className="kpi-val">{nl.processLicensesNeeded}</span>
+                <span className="kpi-lbl">Process lic. needed</span>
+              </div>
+            )}
+            {nl.addonsCapped && nl.processLicenseCostMonthly > 0 && (
+              <div className="kpi-pill kpi-red">
+                <span className="kpi-val">{fmtCur(nl.processLicenseCostMonthly)}/mo</span>
+                <span className="kpi-lbl">Process lic. cost</span>
               </div>
             )}
           </div>
@@ -239,6 +257,26 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
           {/* ── Overrun remediation options ── */}
           {nl.overrun > 0 && (
             <>
+              {/* 10M platform cap warning */}
+              {nl.addonsCapped && (
+                <div style={{
+                  background: 'rgba(218,54,51,0.12)',
+                  border: '1px solid var(--red)',
+                  borderRadius: 8,
+                  padding: '10px 14px',
+                  marginBottom: 12,
+                  fontSize: '0.88em',
+                }}>
+                  <strong style={{ color: 'var(--red)' }}>⚠️ Platform limit reached</strong>
+                  <p style={{ margin: '4px 0 0', color: 'var(--text)' }}>
+                    The non-licensed tenant pool is hard-capped at <strong>10,000,000 req/day</strong> by Microsoft.
+                    Add-ons can fill only up to this ceiling. The excess of{' '}
+                    <strong style={{ color: 'var(--red)' }}>+{fmtNum(nl.excessAbove10M)} req/day</strong> above 10M
+                    must be covered with <strong>Power Automate Process licenses</strong> ({fmtNum(250_000)} req/day each).
+                  </p>
+                </div>
+              )}
+
               <h4 style={{ margin: '4px 0 10px', fontSize: '0.85em', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Remediation Options
               </h4>
@@ -255,9 +293,19 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
                   </thead>
                   <tbody>
                     <tr>
-                      <td><strong>A — PP Request Add-ons</strong></td>
+                      <td>
+                        <strong>A — PP Request Add-ons</strong>
+                        {nl.addonsCapped && <span style={{ color: 'var(--red)', fontSize: '0.8em', marginLeft: 6 }}>(capped at 10M)</span>}
+                      </td>
                       <td className="num">{nl.addonsNeeded}</td>
-                      <td className="num">+{fmtNum(nl.addonsNeeded * REQUEST_ADDON_CAPACITY)} req/day</td>
+                      <td className="num">
+                        +{fmtNum(nl.addonsNeeded * REQUEST_ADDON_CAPACITY)} req/day
+                        {nl.addonsCapped && (
+                          <span style={{ display: 'block', fontSize: '0.8em', color: 'var(--text-muted)' }}>
+                            fills pool to {fmtNum(10_000_000)}/day max
+                          </span>
+                        )}
+                      </td>
                       <td className="num">
                         {nl.addonCostMonthly > 0
                           ? <strong>{fmtCur(nl.addonCostMonthly)}</strong>
@@ -265,17 +313,43 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
                       </td>
                       <td style={{ fontSize: '0.82em', color: 'var(--text-muted)' }}>
                         Expands shared tenant pool; benefits all non-licensed callers
+                        {nl.addonsCapped && '. Cannot exceed 10M/day platform limit.'}
                       </td>
                     </tr>
-                    <tr>
-                      <td><strong>B — Process Licenses</strong> (top callers)</td>
-                      <td className="num">varies</td>
-                      <td className="num">250k req/day each</td>
-                      <td className="num"><em style={{ color: 'var(--text-muted)' }}>See below</em></td>
-                      <td style={{ fontSize: '0.82em', color: 'var(--text-muted)' }}>
-                        Removes flow from shared pool; environment-specific; best for high-volume SPs
-                      </td>
-                    </tr>
+                    {nl.addonsCapped ? (
+                      <tr className="row-non-compliant">
+                        <td><strong>B — Process Licenses</strong> <span style={{ fontSize: '0.8em' }}>(mandatory for excess above 10M)</span></td>
+                        <td className="num">{nl.processLicensesNeeded}</td>
+                        <td className="num">{fmtNum(nl.processLicensesNeeded * 250_000)} req/day</td>
+                        <td className="num">
+                          {nl.processLicenseCostMonthly > 0
+                            ? <strong style={{ color: 'var(--red)' }}>{fmtCur(nl.processLicenseCostMonthly)}</strong>
+                            : <em style={{ color: 'var(--text-muted)' }}>Set Process price in ⚙️</em>}
+                        </td>
+                        <td style={{ fontSize: '0.82em', color: 'var(--text-muted)' }}>
+                          Required — platform will throttle above 10M. Each license covers 250k req/day per flow.
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr>
+                        <td><strong>B — Process Licenses</strong> (top callers)</td>
+                        <td className="num">varies</td>
+                        <td className="num">250k req/day each</td>
+                        <td className="num"><em style={{ color: 'var(--text-muted)' }}>See below</em></td>
+                        <td style={{ fontSize: '0.82em', color: 'var(--text-muted)' }}>
+                          Removes flow from shared pool; environment-specific; best for high-volume SPs
+                        </td>
+                      </tr>
+                    )}
+                    {nl.addonsCapped && nl.addonCostMonthly > 0 && nl.processLicenseCostMonthly > 0 && (
+                      <tr style={{ fontWeight: 700 }}>
+                        <td>Total (A + B)</td>
+                        <td />
+                        <td />
+                        <td className="num">{fmtCur(nl.addonCostMonthly + nl.processLicenseCostMonthly)}/mo</td>
+                        <td style={{ fontSize: '0.82em', color: 'var(--text-muted)' }}>Combined minimum monthly cost</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
