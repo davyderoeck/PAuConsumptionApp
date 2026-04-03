@@ -22,7 +22,7 @@ const DETAIL_COLUMNS: Array<[keyof ClassifiedUser, string]> = [
 
 /**
  * Generate and download an Excel workbook matching the Python script output.
- * Sheets: Seller Summary, User Detail, Top 20 Premium, Top 10 Process, Opportunity Value, Assumptions
+ * Sheets: Summary, User Detail, Top 20 Premium, Top 10 Process, License Cost Estimate, Assumptions
  */
 export function generateReport(summary: SellerSummary, users: ClassifiedUser[], currency = 'USD'): void {
   const wb = XLSX.utils.book_new();
@@ -40,7 +40,7 @@ export function generateReport(summary: SellerSummary, users: ClassifiedUser[], 
     .slice(0, 10);
   addDetailSheet(wb, 'Top 10 Process', processUsers);
 
-  addOpportunitySheet(wb, summary, currency);
+  addLicenseCostSheet(wb, summary, currency);
   addAssumptionsSheet(wb);
 
   const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
@@ -62,12 +62,12 @@ function addSellerSummarySheet(wb: XLSX.WorkBook, s: SellerSummary, currency: st
     ['Users needing Process licensing', s.usersNeedingProcessLicenses],
     ['Total Process licenses required', s.totalProcessLicensesRequired],
     ['Incremental Process licenses for compliance', s.incrementalProcessLicensesForCompliance],
-    [`Monthly opportunity estimate (${currency})`, s.monthlyOpportunityUsd],
-    [`Annual opportunity estimate (${currency})`, s.annualOpportunityUsd],
+    [`Estimated monthly compliance investment (${currency})`, s.monthlyOpportunityUsd],
+    [`Estimated annual compliance investment (${currency})`, s.annualOpportunityUsd],
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [{ wch: 45 }, { wch: 20 }];
-  XLSX.utils.book_append_sheet(wb, ws, 'Seller Summary');
+  XLSX.utils.book_append_sheet(wb, ws, 'Summary');
 }
 
 function addDetailSheet(wb: XLSX.WorkBook, sheetName: string, users: ClassifiedUser[]): void {
@@ -86,19 +86,19 @@ function addDetailSheet(wb: XLSX.WorkBook, sheetName: string, users: ClassifiedU
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
 }
 
-function addOpportunitySheet(wb: XLSX.WorkBook, s: SellerSummary, currency: string): void {
+function addLicenseCostSheet(wb: XLSX.WorkBook, s: SellerSummary, currency: string): void {
   const rows = [
     ['Metric', 'Value'],
     [`Premium list price per month (${currency})`, s.premiumPriceMonthly],
     [`Process list price per month (${currency})`, s.processPriceMonthly],
     ['Additional Premium licenses required', s.additionalPremiumLicensesRequired],
     ['Total Process licenses required', s.totalProcessLicensesRequired],
-    [`Monthly opportunity estimate (${currency})`, s.monthlyOpportunityUsd],
-    [`Annual opportunity estimate (${currency})`, s.annualOpportunityUsd],
+    [`Estimated monthly compliance investment (${currency})`, s.monthlyOpportunityUsd],
+    [`Estimated annual compliance investment (${currency})`, s.annualOpportunityUsd],
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [{ wch: 38 }, { wch: 20 }];
-  XLSX.utils.book_append_sheet(wb, ws, 'Opportunity Value');
+  XLSX.utils.book_append_sheet(wb, ws, 'License Cost Estimate');
 }
 
 function addAssumptionsSheet(wb: XLSX.WorkBook): void {
@@ -140,8 +140,8 @@ export function exportSummaryOverview(
     ['Total Process Licenses Required', summary.totalProcessLicensesRequired],
     [`Premium Price/mo (${currency})`, premiumPrice],
     [`Process Price/mo (${currency})`, processPrice],
-    [`Monthly Opportunity (${currency})`, monthlyOpp],
-    [`Annual Opportunity (${currency})`, monthlyOpp * 12],
+    [`Estimated monthly compliance investment (${currency})`, monthlyOpp],
+    [`Estimated annual compliance investment (${currency})`, monthlyOpp * 12],
     ['Period', summary.dateRange],
   ];
   const kpiWs = XLSX.utils.aoa_to_sheet(kpiRows);

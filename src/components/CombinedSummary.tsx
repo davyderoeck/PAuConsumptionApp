@@ -125,12 +125,12 @@ export default function CombinedSummary({ loadedFiles, premiumPrice, processPric
         )}
         <div className="combined-kpi combined-kpi-total">
           <span className="combined-kpi-value combined-kpi-blue">{fmt(totalMonthlyCost, currency)}</span>
-          <span className="combined-kpi-label">TOTAL MONTHLY</span>
+          <span className="combined-kpi-label">COMPLIANCE INVESTMENT/MO</span>
           <span className="combined-kpi-sub">all license types combined</span>
         </div>
         <div className="combined-kpi combined-kpi-annual">
           <span className="combined-kpi-value combined-kpi-annual-value">{fmt(totalAnnualCost, currency)}</span>
-          <span className="combined-kpi-label">TOTAL ANNUAL OPPORTUNITY</span>
+          <span className="combined-kpi-label">COMPLIANCE INVESTMENT/YR</span>
           <span className="combined-kpi-sub">{fmt(totalMonthlyCost, currency)}/mo × 12</span>
         </div>
       </div>
@@ -140,7 +140,7 @@ export default function CombinedSummary({ loadedFiles, premiumPrice, processPric
         <div className="combined-reuse-banner">
           <div className="combined-reuse-icon">♻️</div>
           <div className="combined-reuse-body">
-            <div className="combined-reuse-title">License Reuse Opportunity — save {fmt(monthlySavings, currency)}/mo</div>
+            <div className="combined-reuse-title">License Reuse — potential saving of {fmt(monthlySavings, currency)}/mo</div>
             <div className="combined-reuse-steps">
               <div className="combined-reuse-step">
                 <span className="crs-tag crs-flow">↓ Per-Flow</span>

@@ -194,7 +194,7 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
               </div>
               <div className="kpi-pill kpi-accent">
                 <span className="kpi-val">{fmtCur(liveAnnualOpp)}</span>
-                <span className="kpi-lbl">Annual Opp.</span>
+                <span className="kpi-lbl">Compliance Investment/yr</span>
               </div>
             </>
           )}
