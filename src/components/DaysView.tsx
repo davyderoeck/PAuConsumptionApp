@@ -294,6 +294,12 @@ export default function DaysView({ analysis: nl, rawRows, addonPrice, processPri
                   const isAboveCap = day.requests > D365_POOL_CAP;
                   const isPeak = day.date === nl.peakTenantDay;
 
+                  // Unified status color — matches the Status badge exactly
+                  const rowStatusColor = isAboveCap ? 'var(--red)'
+                    : isOverDay ? '#c18e00'
+                    : pct > 0.8 ? 'var(--amber)'
+                    : 'var(--green)';
+
                   // Add-on cost: only for overrun between pool and 10M cap
                   const dayOverrunForAddons = Math.max(0, Math.min(day.requests, D365_POOL_CAP) - nl.tenantPool);
                   const dayAddonsNeededRow = dayOverrunForAddons > 0 ? Math.ceil(dayOverrunForAddons / REQUEST_ADDON_CAPACITY) : 0;
@@ -343,10 +349,10 @@ export default function DaysView({ analysis: nl, rawRows, addonPrice, processPri
                       </td>
                       <td className="num">{fmtNum(day.requests)}</td>
                       {nl.tenantPool > 0 && (
-                        <td className="num" style={{ color: statusColor(pct) }}>{fmtPct(pct)}</td>
+                        <td className="num" style={{ color: rowStatusColor }}>{fmtPct(pct)}</td>
                       )}
                       {nl.tenantPool > 0 && (
-                        <td className="num" style={{ color: isOverDay ? 'var(--red)' : 'var(--text-muted)' }}>
+                        <td className="num" style={{ color: isOverDay ? rowStatusColor : 'var(--text-muted)' }}>
                           {isOverDay ? `+${fmtNum(overrun)}` : '—'}
                         </td>
                       )}
