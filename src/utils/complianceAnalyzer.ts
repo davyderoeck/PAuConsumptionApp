@@ -177,6 +177,61 @@ function classifyUser(usage: UserUsage, fileType: FileType): ClassifiedUser {
 
   const peakDailyRequests = peak.requests;
 
+  // --- Non-licensed logic: compliance is at tenant level, not per-caller ---
+  // Individual callers have no personal entitlement; the only constraint is the
+  // shared tenant pool assessed in analyzeNonLicensedTenant(). Mark all callers
+  // as individually compliant. Still derive processLicensesPerEnv for
+  // informational display in the drill-down.
+  if (fileType === 'non-licensed') {
+    const processLicensesPerEnv: Record<string, number> = {};
+    for (const [env, envPeak] of Object.entries(usage.envPeakRequests)) {
+      if (envPeak > PROCESS_CAPACITY_UNIT) {
+        processLicensesPerEnv[env] = Math.ceil(envPeak / PROCESS_CAPACITY_UNIT);
+      }
+    }
+
+    const daysOverPremium = days.filter(d => d.requests > PREMIUM_CAPACITY).length;
+    const daysOverStandard = days.filter(d => d.requests > STANDARD_CAPACITY).length;
+    const totalDays = days.length;
+
+    // Informational label — does not affect compliance status
+    let frequencyInsight = '';
+    let frequencyLabel = 'Compliant';
+    if (peakDailyRequests > PROCESS_CAPACITY_UNIT) {
+      frequencyInsight = `Heavy caller: peak ${fmt(peakDailyRequests)}/day — Process license candidate if tenant pool is tight.`;
+      frequencyLabel = 'Monitor first';
+    } else if (peakDailyRequests > PREMIUM_CAPACITY) {
+      frequencyInsight = `Moderate caller: peak ${fmt(peakDailyRequests)}/day.`;
+      frequencyLabel = 'Monitor first';
+    }
+
+    return {
+      callerId: usage.callerId,
+      callerType: usage.callerType,
+      environmentCount: usage.environments.length,
+      environments: usage.environments.sort().join('; '),
+      totalRequests: usage.totalRequests,
+      peakDate: peak.date,
+      peakDailyRequests,
+      peakDayEntitlement: 0,
+      maxEntitledQuantity: 0,
+      effectiveObservedCapacity: 0,
+      capacityGapRequests: 0,
+      compliant: true,
+      recommendation: 'Covered',
+      additionalPremiumRequired: 0,
+      totalProcessLicensesRequired: 0,
+      incrementalProcessLicensesNeeded: 0,
+      processLicensesPerEnv,
+      daysOverStandard,
+      daysOverPremium,
+      daysUnderPremium: 0,
+      totalDays,
+      frequencyInsight,
+      frequencyLabel,
+    };
+  }
+
   // --- Per-flow logic: entitlement is 250K (Process), check if could downgrade ---
   if (fileType === 'per-flow') {
     const entitlement = PROCESS_CAPACITY_UNIT; // 250K per-flow license

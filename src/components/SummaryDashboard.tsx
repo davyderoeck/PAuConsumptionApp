@@ -35,7 +35,7 @@ const PATTERN_CLASS: Record<PatternKey, string> = {
   'Compliant':           'pat-ok',
 };
 
-export default function SummaryDashboard({ summary: s, users, patternFilter, onSelectPattern, fileType, premiumPrice, processPrice, currency, tenantEntitlement, nonLicensedAnalysis }: SummaryDashboardProps) {
+export default function SummaryDashboard({ summary: s, users, patternFilter, onSelectPattern, fileType, premiumPrice, processPrice, currency, nonLicensedAnalysis }: SummaryDashboardProps) {
   const isPerFlow = fileType === 'per-flow';
   const entityLabel = isPerFlow ? 'Flows' : fileType === 'non-licensed' ? 'Callers' : 'Users';
   const complianceRate = s.usersAnalyzed > 0
@@ -48,6 +48,15 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
   const fmtNum = (n: number) => n.toLocaleString();
 
   const nl = nonLicensedAnalysis;
+
+  // ── Pool gauge arc computation (non-licensed) ──────────────────────
+  const poolRawPct  = nl && nl.tenantPool > 0 ? nl.peakTenantRequests / nl.tenantPool : 0;
+  const poolPctCap  = Math.min(poolRawPct, 0.9999);
+  const poolAngle   = Math.PI * poolPctCap;
+  const poolArcEndX = (100 - 80 * Math.cos(poolAngle)).toFixed(2);
+  const poolArcEndY = (100 - 80 * Math.sin(poolAngle)).toFixed(2);
+  const poolLargeArc = poolPctCap > 0.5 ? 1 : 0;
+  const poolFillClr = nl && nl.overrun > 0 ? '#da3633' : poolRawPct > 0.8 ? '#d29922' : '#3fb950';
 
   // Build per-pattern breakdown
   const byPattern: Record<PatternKey, ClassifiedUser[]> = {
@@ -84,11 +93,7 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
         <div>
           <h2>📊 Analysis Summary</h2>
           <p className="date-range">Period: {s.dateRange}</p>
-          {tenantEntitlement !== undefined && (
-            <p className="date-range" style={{ marginTop: 2, color: 'var(--text-muted)', fontSize: '0.8em' }}>
-              🏢 Tenant pool: {tenantEntitlement.toLocaleString()} req/day shared across non-licensed callers
-            </p>
-          )}
+
         </div>
         <div className="summary-top-actions">
           <button className="btn-export-small"
@@ -123,6 +128,73 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
           </div>
         </div>
       </div>
+
+      {/* ── Tenant pool gauge banner ── */}
+      {fileType === 'non-licensed' && nl && nl.tenantPool > 0 && (
+        <div className={`pool-gauge-banner ${nl.overrun > 0 ? 'pool-gauge-overrun' : nl.peakTenantRequests / nl.tenantPool > 0.8 ? 'pool-gauge-warning' : 'pool-gauge-ok'}`}>
+          <div className="pool-gauge-semi">
+            <svg viewBox="0 0 200 108" className="pool-gauge-svg">
+              {/* Track */}
+              <path d="M 20 100 A 80 80 0 0 0 180 100" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="14" strokeLinecap="round"/>
+              {/* Fill */}
+              {poolRawPct > 0 && (
+                <path
+                  d={`M 20 100 A 80 80 0 ${poolLargeArc} 0 ${poolArcEndX} ${poolArcEndY}`}
+                  fill="none" stroke={poolFillClr} strokeWidth="14" strokeLinecap="round"
+                />
+              )}
+              {/* Overrun dot at cap */}
+              {nl.overrun > 0 && <circle cx="180" cy="100" r="5" fill="#da3633"/>}
+              {/* Percentage label */}
+              <text x="100" y="74" textAnchor="middle" fill={poolFillClr} fontSize="24" fontWeight="700" fontFamily="inherit">
+                {`${(poolRawPct * 100).toFixed(1)}%`}
+              </text>
+              <text x="100" y="91" textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize="10" fontFamily="inherit">
+                of pool used
+              </text>
+              <text x="18" y="108" textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="9" fontFamily="inherit">0</text>
+              <text x="182" y="108" textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="9" fontFamily="inherit">100%</text>
+            </svg>
+          </div>
+
+          <div className="pool-gauge-info">
+            <div className="pool-gauge-title">🏢 Tenant Pool Health</div>
+            <div className="pool-gauge-status" style={{ color: poolFillClr }}>
+              {nl.overrun > 0
+                ? `⚠️ Pool exceeded — overrun of ${fmtNum(nl.overrun)} req/day`
+                : `✅ Compliant — peak usage within entitled pool`}
+            </div>
+
+            <div className="pool-gauge-numbers">
+              <div className="pool-gauge-num">
+                <span className="pool-gauge-big" style={{ color: poolFillClr }}>{fmtNum(nl.peakTenantRequests)}</span>
+                <span className="pool-gauge-lbl">Peak req/day ({nl.peakTenantDay})</span>
+              </div>
+              <div className="pool-gauge-sep">vs</div>
+              <div className="pool-gauge-num">
+                <span className="pool-gauge-big">{fmtNum(nl.tenantPool)}</span>
+                <span className="pool-gauge-lbl">Entitled req/day</span>
+              </div>
+            </div>
+
+            {/* Horizontal bar */}
+            <div className="pool-gauge-bar">
+              <div
+                className="pool-gauge-fill"
+                style={{ width: `${Math.min(poolRawPct * 100, 100)}%`, background: poolFillClr }}
+              />
+              {nl.overrun > 0 && (
+                <div className="pool-gauge-overrun-stripe"/>
+              )}
+            </div>
+            <div className="pool-gauge-bar-labels">
+              <span>Used: {fmtNum(nl.peakTenantRequests)}</span>
+              {nl.overrun === 0 && <span>Free: {fmtNum(nl.tenantPool - nl.peakTenantRequests)}</span>}
+              {nl.overrun > 0 && <span style={{ color: '#da3633' }}>Overrun: +{fmtNum(nl.overrun)}</span>}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Non-licensed tenant pool analysis ── */}
       {fileType === 'non-licensed' && nl && (
