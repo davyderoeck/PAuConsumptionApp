@@ -1,5 +1,5 @@
 import type { ClassifiedUser, FileType, NonLicensedTenantAnalysis, SellerSummary } from '../types';
-import { REQUEST_ADDON_CAPACITY } from '../types';
+import { REQUEST_ADDON_CAPACITY, D365_POOL_CAP } from '../types';
 import { exportSummaryOverview } from '../utils/reportGenerator';
 
 interface SummaryDashboardProps {
@@ -49,12 +49,20 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
 
   const nl = nonLicensedAnalysis;
 
-  // ── Pool gauge data (non-licensed) ──────────────────────────────────────
+  // ── Pool gauge data (non-licensed) — 3 zones ────────────────────────────
+  // Green = entitled pool, Amber = add-on zone (pool → 10M), Red = process zone (above 10M)
   const poolRawPct    = nl && nl.tenantPool > 0 ? nl.peakTenantRequests / nl.tenantPool : 0;
   const isOverrunGauge = nl ? nl.overrun > 0 : false;
-  const poolFillClr   = isOverrunGauge ? '#da3633' : poolRawPct > 0.8 ? '#d29922' : '#3fb950';
-  const barGreenPct   = isOverrunGauge && nl ? (nl.tenantPool  / nl.peakTenantRequests) * 100 : Math.min(poolRawPct * 100, 100);
-  const barRedPct     = isOverrunGauge && nl ? (nl.overrun     / nl.peakTenantRequests) * 100 : 0;
+  const poolFillClr   = nl?.addonsCapped ? '#da3633' : isOverrunGauge ? '#c18e00' : poolRawPct > 0.8 ? '#d29922' : '#3fb950';
+  // 3-zone bar: total width = peak requests (100%)
+  const peak = nl ? nl.peakTenantRequests : 0;
+  const barGreenPct = peak > 0 ? (Math.min(peak, nl!.tenantPool) / peak) * 100 : 100;
+  const barAmberPct = nl && peak > nl.tenantPool && peak > 0
+    ? ((Math.min(peak, D365_POOL_CAP) - nl.tenantPool) / peak) * 100
+    : 0;
+  const barRedPct   = nl && peak > D365_POOL_CAP
+    ? ((peak - D365_POOL_CAP) / peak) * 100
+    : 0;
 
   // Build per-pattern breakdown
   const byPattern: Record<PatternKey, ClassifiedUser[]> = {
@@ -139,8 +147,10 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
           <div className="pool-gauge-info">
             <div className="pool-gauge-title">🏢 Tenant Pool Health</div>
             <div className="pool-gauge-status" style={{ color: poolFillClr }}>
-              {nl.overrun > 0
-                ? `⚠️ Pool exceeded — overrun of ${fmtNum(nl.overrun)} req/day`
+              {nl.addonsCapped
+                ? `⚠️ Exceeds 10M cap — +${fmtNum(nl.excessAbove10M)} req/day requires Process licenses`
+                : nl.overrun > 0
+                ? `⚠️ Pool exceeded — +${fmtNum(nl.overrun)} req/day (coverable by add-ons)`
                 : `✅ Compliant — peak usage within entitled pool`}
             </div>
 
@@ -156,17 +166,40 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
               </div>
             </div>
 
-            {/* Horizontal bar */}
+            {/* Horizontal 3-zone bar */}
             <div className="pool-gauge-bar">
-              <div className="pool-gauge-fill" style={{ width: `${barGreenPct}%`, background: '#3fb950', borderRadius: isOverrunGauge ? '4px 0 0 4px' : 4 }} />
-              {isOverrunGauge && barRedPct > 0 && (
-                <div className="pool-gauge-fill" style={{ width: `${barRedPct}%`, background: '#da3633', borderRadius: '0 4px 4px 0' }} />
+              <div className="pool-gauge-fill" style={{
+                width: `${barGreenPct}%`,
+                background: '#3fb950',
+                borderRadius: isOverrunGauge ? '4px 0 0 4px' : 4,
+              }} />
+              {barAmberPct > 0 && (
+                <div className="pool-gauge-fill" style={{
+                  width: `${barAmberPct}%`,
+                  background: '#c18e00',
+                  borderRadius: barRedPct > 0 ? 0 : '0 4px 4px 0',
+                }} />
+              )}
+              {barRedPct > 0 && (
+                <div className="pool-gauge-fill" style={{
+                  width: `${barRedPct}%`,
+                  background: '#da3633',
+                  borderRadius: '0 4px 4px 0',
+                }} />
               )}
             </div>
             <div className="pool-gauge-bar-labels">
               <span style={{ color: '#3fb950' }}>✓ Entitled: {fmtNum(nl.tenantPool)}</span>
               {nl.overrun === 0 && <span>Free: {fmtNum(nl.tenantPool - nl.peakTenantRequests)}</span>}
-              {nl.overrun > 0 && <span style={{ color: '#da3633' }}>▲ Overrun: +{fmtNum(nl.overrun)}</span>}
+              {nl.overrun > 0 && !nl.addonsCapped && (
+                <span style={{ color: '#c18e00' }}>■ Add-on zone: +{fmtNum(nl.overrun)} (max 10M)</span>
+              )}
+              {nl.addonsCapped && (
+                <span style={{ color: '#c18e00' }}>■ Add-on zone: +{fmtNum(D365_POOL_CAP - nl.tenantPool)} to 10M cap</span>
+              )}
+              {nl.addonsCapped && (
+                <span style={{ color: '#da3633' }}>▲ Process zone: +{fmtNum(nl.excessAbove10M)} above 10M</span>
+              )}
             </div>
           </div>
         </div>
@@ -230,25 +263,30 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
                 <span>Peak day utilisation  —  {nl.peakTenantDay}</span>
                 <span>{Math.round((nl.peakTenantRequests / nl.tenantPool) * 100)}% of pool</span>
               </div>
-              <div style={{ height: 10, borderRadius: 5, background: 'var(--border)', overflow: 'visible', position: 'relative' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${Math.min((nl.peakTenantRequests / Math.max(nl.peakTenantRequests, nl.tenantPool)) * 100, 100)}%`,
-                  background: nl.overrun > 0 ? 'var(--red)' : nl.peakTenantRequests / nl.tenantPool > 0.8 ? 'var(--amber)' : 'var(--green)',
-                  borderRadius: 5,
-                }} />
-                {/* Pool cap marker */}
-                {nl.overrun === 0 && (
-                  <div style={{
-                    position: 'absolute', top: -3, bottom: -3,
-                    left: `${(nl.tenantPool / Math.max(nl.peakTenantRequests, nl.tenantPool)) * 100}%`,
-                    width: 2, background: 'var(--text-muted)', borderRadius: 1,
-                  }} />
-                )}
+              {/* 3-zone bar: green=pool, amber=add-on zone, red=process zone */}
+              <div style={{ height: 10, borderRadius: 5, background: 'var(--border)', overflow: 'hidden', position: 'relative', display: 'flex' }}>
+                {(() => {
+                  const tot = Math.max(nl.peakTenantRequests, nl.tenantPool);
+                  const gPct = (Math.min(nl.peakTenantRequests, nl.tenantPool) / tot) * 100;
+                  const aPct = nl.overrun > 0
+                    ? ((Math.min(nl.peakTenantRequests, D365_POOL_CAP) - nl.tenantPool) / tot) * 100
+                    : 0;
+                  const rPct = nl.addonsCapped
+                    ? ((nl.peakTenantRequests - D365_POOL_CAP) / tot) * 100
+                    : 0;
+                  return (
+                    <>
+                      <div style={{ height: '100%', width: `${gPct}%`, background: '#3fb950', borderRadius: '5px 0 0 5px' }} />
+                      {aPct > 0 && <div style={{ height: '100%', width: `${aPct}%`, background: '#c18e00', borderRadius: rPct > 0 ? 0 : '0 5px 5px 0' }} />}
+                      {rPct > 0 && <div style={{ height: '100%', width: `${rPct}%`, background: '#da3633', borderRadius: '0 5px 5px 0' }} />}
+                    </>
+                  );
+                })()}
               </div>
               {nl.overrun > 0 && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 4, fontSize: '0.75em', color: 'var(--red)' }}>
-                  <span>▲ Overrun: +{fmtNum(nl.overrun)} req/day above pool cap ({fmtNum(nl.tenantPool)})</span>
+                <div style={{ display: 'flex', gap: 12, marginTop: 4, fontSize: '0.75em', flexWrap: 'wrap' }}>
+                  <span style={{ color: '#c18e00' }}>■ Add-on zone: +{fmtNum(Math.min(nl.overrun, D365_POOL_CAP - nl.tenantPool))} req/day</span>
+                  {nl.addonsCapped && <span style={{ color: '#da3633' }}>■ Process zone: +{fmtNum(nl.excessAbove10M)} req/day above 10M cap</span>}
                 </div>
               )}
             </div>

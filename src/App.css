@@ -537,6 +537,14 @@ main {
   z-index: 1;
   pointer-events: none;
 }
+/* 10M platform cap marker — dashed amber line */
+.days-cap-marker {
+  background: transparent;
+  border-left: 2px dashed #c18e00;
+  width: 0;
+  top: -4px;
+  bottom: -4px;
+}
 .days-peak-badge {
   font-size: 0.72em;
   color: var(--red);

@@ -313,7 +313,7 @@ function App() {
               )}
 
               {activeView === 'days' && nonLicensedAnalysis && (
-                <DaysView analysis={nonLicensedAnalysis} rawRows={rawRows} addonPrice={tenantPoolConfig.requestAddonPrice} />
+                <DaysView analysis={nonLicensedAnalysis} rawRows={rawRows} addonPrice={tenantPoolConfig.requestAddonPrice} processPrice={processPrice} />
               )}
             </>
           )}

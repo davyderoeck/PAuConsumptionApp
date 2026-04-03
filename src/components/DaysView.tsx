@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import type { NonLicensedTenantAnalysis, RawApiRow } from '../types';
+import { D365_POOL_CAP, PROCESS_CAPACITY_UNIT, REQUEST_ADDON_CAPACITY } from '../types';
 
 interface DaysViewProps {
   analysis: NonLicensedTenantAnalysis;
   rawRows: RawApiRow[];
-  addonPrice: number;   // $/month per add-on (from settings)
+  addonPrice: number;      // $/month per PP Request add-on (50k req/day)
+  processPrice: number;   // $/month per Process license (250k req/day)
 }
 
 interface DayEnvCaller {
@@ -64,7 +66,7 @@ function buildDayDetail(rows: RawApiRow[], date: string, tenantPool: number): Da
   return envList.map(e => ({ ...e, coverage: coverageMap.get(e.envId) ?? 'covered' }));
 }
 
-export default function DaysView({ analysis: nl, rawRows, addonPrice }: DaysViewProps) {
+export default function DaysView({ analysis: nl, rawRows, addonPrice, processPrice }: DaysViewProps) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [expandedEnvId, setExpandedEnvId] = useState<string | null>(null);
 
@@ -98,10 +100,15 @@ export default function DaysView({ analysis: nl, rawRows, addonPrice }: DaysView
   const dayPct = nl.tenantPool > 0 ? dayTotal / nl.tenantPool : 0;
   const dayOverrun = Math.max(0, dayTotal - nl.tenantPool);
 
-  // PPR opportunity for this day's overrun
-  const REQUEST_ADDON_CAPACITY = 50_000;
-  const dayAddonsNeeded = dayOverrun > 0 ? Math.ceil(dayOverrun / REQUEST_ADDON_CAPACITY) : 0;
-  const dayAddonCost = addonPrice > 0 ? dayAddonsNeeded * addonPrice : null;
+  // Per-day 10M-aware cost calculations (drill-down)
+  const dayOverrunForAddons = Math.max(0, Math.min(dayTotal, D365_POOL_CAP) - nl.tenantPool);
+  const dayAddonsNeeded = dayOverrunForAddons > 0 ? Math.ceil(dayOverrunForAddons / REQUEST_ADDON_CAPACITY) : 0;
+  const dayAddonCost = addonPrice > 0 && dayAddonsNeeded > 0 ? dayAddonsNeeded * addonPrice : null;
+  const dayExcessAbove10M = Math.max(0, dayTotal - D365_POOL_CAP);
+  const dayProcessLicNeeded = dayExcessAbove10M > 0 ? Math.ceil(dayExcessAbove10M / PROCESS_CAPACITY_UNIT) : 0;
+  const dayProcessCost = processPrice > 0 && dayProcessLicNeeded > 0 ? dayProcessLicNeeded * processPrice : null;
+  // Show the 10M marker line in bars only when relevant
+  const anyDayAbove10M = nl.addonsCapped;
 
   return (
     <div className="days-view">
@@ -140,19 +147,37 @@ export default function DaysView({ analysis: nl, rawRows, addonPrice }: DaysView
             {dayOverrun > 0 && (
               <div className="days-day-kpi">
                 <span className="days-day-kpi-val" style={{ color: 'var(--red)' }}>+{fmtNum(dayOverrun)}</span>
-                <span className="days-day-kpi-lbl">Overrun</span>
+                <span className="days-day-kpi-lbl">Overrun vs pool</span>
               </div>
             )}
-            {dayOverrun > 0 && (
+            {dayAddonsNeeded > 0 && (
               <div className="days-day-kpi">
                 <span className="days-day-kpi-val" style={{ color: 'var(--amber)' }}>{dayAddonsNeeded}</span>
-                <span className="days-day-kpi-lbl">Add-ons needed</span>
+                <span className="days-day-kpi-lbl">Add-ons needed{dayExcessAbove10M > 0 ? ' (max)' : ''}</span>
               </div>
             )}
-            {dayOverrun > 0 && dayAddonCost !== null && (
+            {dayAddonCost !== null && (
               <div className="days-day-kpi">
                 <span className="days-day-kpi-val" style={{ color: 'var(--accent)' }}>{fmtCur(dayAddonCost)}/mo</span>
-                <span className="days-day-kpi-lbl">PPR add-on cost</span>
+                <span className="days-day-kpi-lbl">Add-on cost</span>
+              </div>
+            )}
+            {dayExcessAbove10M > 0 && (
+              <div className="days-day-kpi">
+                <span className="days-day-kpi-val" style={{ color: 'var(--red)' }}>+{fmtNum(dayExcessAbove10M)}</span>
+                <span className="days-day-kpi-lbl">Above 10M cap</span>
+              </div>
+            )}
+            {dayProcessLicNeeded > 0 && (
+              <div className="days-day-kpi">
+                <span className="days-day-kpi-val" style={{ color: 'var(--red)' }}>{dayProcessLicNeeded}</span>
+                <span className="days-day-kpi-lbl">Process lic. needed</span>
+              </div>
+            )}
+            {dayProcessCost !== null && (
+              <div className="days-day-kpi">
+                <span className="days-day-kpi-val" style={{ color: 'var(--red)' }}>{fmtCur(dayProcessCost)}/mo</span>
+                <span className="days-day-kpi-lbl">Process lic. cost</span>
               </div>
             )}
             <div className="days-day-kpi">
@@ -241,11 +266,21 @@ export default function DaysView({ analysis: nl, rawRows, addonPrice }: DaysView
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>Consumption vs Pool</th>
+                  <th>
+                    Consumption vs Pool
+                    {anyDayAbove10M && (
+                      <span style={{ display: 'inline-flex', gap: 8, marginLeft: 10, fontSize: '0.78em', fontWeight: 400 }}>
+                        <span style={{ color: 'var(--green)' }}>■ pool</span>
+                        <span style={{ color: '#c18e00' }}>■ add-on zone</span>
+                        <span style={{ color: 'var(--red)' }}>■ process zone</span>
+                      </span>
+                    )}
+                  </th>
                   <th className="num">Total Requests</th>
                   {nl.tenantPool > 0 && <th className="num">% of Pool</th>}
                   {nl.tenantPool > 0 && <th className="num">Overrun</th>}
-                  {nl.tenantPool > 0 && addonPrice > 0 && <th className="num">PPR Cost/mo</th>}
+                  {nl.tenantPool > 0 && addonPrice > 0 && <th className="num">Add-on Cost/mo</th>}
+                  {nl.addonsCapped && <th className="num" style={{ color: 'var(--red)' }}>Process Cost/mo</th>}
                   <th className="num">Status</th>
                 </tr>
               </thead>
@@ -255,14 +290,40 @@ export default function DaysView({ analysis: nl, rawRows, addonPrice }: DaysView
                   const overrun = Math.max(0, day.requests - nl.tenantPool);
                   const barW = Math.min((day.requests / maxDay) * 100, 100);
                   const poolMarkPct = nl.tenantPool > 0 ? Math.min((nl.tenantPool / maxDay) * 100, 100) : 100;
+                  const capMarkPct = Math.min((D365_POOL_CAP / maxDay) * 100, 100);
                   const isOverDay = overrun > 0;
+                  const isAboveCap = day.requests > D365_POOL_CAP;
                   const isPeak = day.date === nl.peakTenantDay;
-                  const addonsNeeded = isOverDay ? Math.ceil(overrun / REQUEST_ADDON_CAPACITY) : 0;
-                  const addonCost = addonsNeeded * addonPrice;
+
+                  // Add-on cost: only for overrun between pool and 10M cap
+                  const dayOverrunForAddons = Math.max(0, Math.min(day.requests, D365_POOL_CAP) - nl.tenantPool);
+                  const dayAddonsNeededRow = dayOverrunForAddons > 0 ? Math.ceil(dayOverrunForAddons / REQUEST_ADDON_CAPACITY) : 0;
+                  const dayAddonCostRow = dayAddonsNeededRow * addonPrice;
+
+                  // Process cost: only for overrun above 10M cap
+                  const dayExcess10M = Math.max(0, day.requests - D365_POOL_CAP);
+                  const dayProcLicRow = dayExcess10M > 0 ? Math.ceil(dayExcess10M / PROCESS_CAPACITY_UNIT) : 0;
+                  const dayProcCostRow = dayProcLicRow * processPrice;
+
+                  // 3-zone gradient for overrun bars
+                  const poolFracInFill = barW > 0 && day.requests > nl.tenantPool
+                    ? Math.min((nl.tenantPool / day.requests) * 100, 100) : 100;
+                  const capFracInFill = barW > 0 && day.requests > D365_POOL_CAP
+                    ? Math.min((D365_POOL_CAP / day.requests) * 100, 100) : 100;
+
+                  let barBackground: string;
+                  if (!isOverDay) {
+                    barBackground = statusColor(pct);
+                  } else if (isAboveCap) {
+                    barBackground = `linear-gradient(to right, #3fb950 ${poolFracInFill}%, #c18e00 ${poolFracInFill}%, #c18e00 ${capFracInFill}%, #da3633 ${capFracInFill}%)`;
+                  } else {
+                    barBackground = `linear-gradient(to right, #3fb950 ${poolFracInFill}%, #c18e00 ${poolFracInFill}%)`;
+                  }
+
                   return (
                     <tr
                       key={day.date}
-                      className={`breakdown-clickable ${statusClass(pct)}`}
+                      className={`breakdown-clickable ${isAboveCap ? 'row-non-compliant' : statusClass(pct)}`}
                       onClick={() => navigate(day.date)}
                       title="Click to see environments for this day"
                     >
@@ -275,15 +336,10 @@ export default function DaysView({ analysis: nl, rawRows, addonPrice }: DaysView
                           {nl.tenantPool > 0 && (
                             <div className="days-pool-marker" style={{ left: `${poolMarkPct}%` }} title={`Pool cap: ${fmtNum(nl.tenantPool)}`} />
                           )}
-                          <div
-                            className="days-bar-fill"
-                            style={{
-                              width: `${barW}%`,
-                              background: isOverDay
-                                ? `linear-gradient(to right, #3fb950 ${poolMarkPct}%, #da3633 ${poolMarkPct}%)`
-                                : statusColor(pct),
-                            }}
-                          />
+                          {anyDayAbove10M && capMarkPct < 100 && (
+                            <div className="days-pool-marker days-cap-marker" style={{ left: `${capMarkPct}%` }} title={`10M platform cap: ${fmtNum(D365_POOL_CAP)}`} />
+                          )}
+                          <div className="days-bar-fill" style={{ width: `${barW}%`, background: barBackground }} />
                         </div>
                       </td>
                       <td className="num">{fmtNum(day.requests)}</td>
@@ -296,13 +352,24 @@ export default function DaysView({ analysis: nl, rawRows, addonPrice }: DaysView
                         </td>
                       )}
                       {nl.tenantPool > 0 && addonPrice > 0 && (
-                        <td className="num" style={{ color: isOverDay ? 'var(--accent)' : 'var(--text-muted)' }}>
-                          {isOverDay && addonCost > 0 ? fmtCur(addonCost) : '—'}
+                        <td className="num" style={{ color: dayAddonCostRow > 0 ? '#c18e00' : 'var(--text-muted)' }}>
+                          {dayAddonCostRow > 0 ? fmtCur(dayAddonCostRow) : '—'}
+                        </td>
+                      )}
+                      {nl.addonsCapped && (
+                        <td className="num" style={{ color: dayProcCostRow > 0 ? 'var(--red)' : 'var(--text-muted)' }}>
+                          {dayProcCostRow > 0
+                            ? <strong>{fmtCur(dayProcCostRow)}</strong>
+                            : dayExcess10M > 0 && processPrice === 0
+                            ? <em style={{ color: 'var(--text-muted)' }}>Set price ⚙️</em>
+                            : '—'}
                         </td>
                       )}
                       <td className="num">
-                        {isOverDay
-                          ? <span style={{ color: 'var(--red)', fontWeight: 600 }}>⚠ Over</span>
+                        {isAboveCap
+                          ? <span style={{ color: 'var(--red)', fontWeight: 600 }}>⚠ &gt;10M</span>
+                          : isOverDay
+                          ? <span style={{ color: '#c18e00', fontWeight: 600 }}>⚠ Over</span>
                           : pct > 0.8
                           ? <span style={{ color: 'var(--amber)' }}>~ High</span>
                           : <span style={{ color: 'var(--green)' }}>✓ OK</span>}
