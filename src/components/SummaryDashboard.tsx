@@ -1,5 +1,5 @@
 import type { ClassifiedUser, FileType, NonLicensedTenantAnalysis, SellerSummary } from '../types';
-import { REQUEST_ADDON_CAPACITY, D365_POOL_CAP } from '../types';
+import { REQUEST_ADDON_CAPACITY, D365_POOL_CAP, PROCESS_CAPACITY_UNIT } from '../types';
 import { exportSummaryOverview } from '../utils/reportGenerator';
 
 interface SummaryDashboardProps {
@@ -10,6 +10,7 @@ interface SummaryDashboardProps {
   fileType: FileType;
   premiumPrice: number;
   processPrice: number;
+  addonPrice: number;
   currency: string;
   tenantEntitlement?: number;
   nonLicensedAnalysis?: NonLicensedTenantAnalysis | null;
@@ -35,7 +36,7 @@ const PATTERN_CLASS: Record<PatternKey, string> = {
   'Compliant':           'pat-ok',
 };
 
-export default function SummaryDashboard({ summary: s, users, patternFilter, onSelectPattern, fileType, premiumPrice, processPrice, currency, nonLicensedAnalysis }: SummaryDashboardProps) {
+export default function SummaryDashboard({ summary: s, users, patternFilter, onSelectPattern, fileType, premiumPrice, processPrice, addonPrice, currency, nonLicensedAnalysis }: SummaryDashboardProps) {
   const isPerFlow = fileType === 'per-flow';
   const entityLabel = isPerFlow ? 'Flows' : fileType === 'non-licensed' ? 'Callers' : 'Users';
   const complianceRate = s.usersAnalyzed > 0
@@ -48,6 +49,36 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
   const fmtNum = (n: number) => n.toLocaleString();
 
   const nl = nonLicensedAnalysis;
+  const fmtPct1 = (n: number) => `${(n * 100).toFixed(0)}%`;
+
+  // ── Day-status grouping for non-licensed breakdown table ──────────────────
+  const dayGroups = nl && nl.tenantPool > 0 ? (() => {
+    const g = {
+      ok:   { days: 0, total: 0, peak: 0 },
+      high: { days: 0, total: 0, peak: 0 },
+      over: { days: 0, total: 0, peak: 0 },
+      cap:  { days: 0, total: 0, peak: 0 },
+    };
+    for (const day of nl.dailyTotals) {
+      const pct = day.requests / nl.tenantPool;
+      const key = day.requests > D365_POOL_CAP ? 'cap'
+                : day.requests > nl.tenantPool  ? 'over'
+                : pct > 0.8                     ? 'high'
+                : 'ok';
+      g[key].days++;
+      g[key].total += day.requests;
+      g[key].peak = Math.max(g[key].peak, day.requests);
+    }
+    return g;
+  })() : null;
+  const dgAddonCost = (peak: number) => {
+    if (!nl || peak <= nl.tenantPool) return 0;
+    const overrunForAddons = Math.min(peak, D365_POOL_CAP) - nl.tenantPool;
+    return Math.ceil(overrunForAddons / REQUEST_ADDON_CAPACITY) * addonPrice;
+  };
+  const dgProcessLic = (peak: number) =>
+    peak > D365_POOL_CAP ? Math.ceil((peak - D365_POOL_CAP) / PROCESS_CAPACITY_UNIT) : 0;
+  const dgProcessCost = (peak: number) => dgProcessLic(peak) * processPrice;
 
   // ── Pool gauge data (non-licensed) — 3 zones ────────────────────────────
   // Green = entitled pool, Amber = add-on zone (pool → 10M), Red = process zone (above 10M)
@@ -429,57 +460,6 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
             </>
           )}
 
-          {/* ── Top callers table ── */}
-          {nl.topCallers.length > 0 && (
-            <>
-              <h4 style={{ margin: '14px 0 6px', fontSize: '0.85em', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Top Callers {nl.overrun > 0 ? '— Process License Candidates' : ''}
-              </h4>
-              <div className="breakdown-scroll">
-                <table className="breakdown-table">
-                  <thead>
-                    <tr>
-                      <th>Caller ID</th>
-                      <th>Type</th>
-                      <th className="num">Peak Daily</th>
-                      <th className="num">Total Requests</th>
-                      <th className="num">% of Pool</th>
-                      {nl.overrun > 0 && <th className="num">Process Lic.</th>}
-                      {nl.overrun > 0 && pProc > 0 && <th className="num">Cost/mo</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {nl.topCallers.map(c => {
-                      const licNeeded = Math.ceil(c.peakDailyRequests / 250_000);
-                      const cost = licNeeded * pProc;
-                      return (
-                        <tr key={c.callerId}>
-                          <td className="caller-cell" title={c.callerId}>{c.callerId}</td>
-                          <td style={{ fontSize: '0.82em', color: 'var(--text-muted)' }}>{c.callerType ?? '—'}</td>
-                          <td className="num">{fmtNum(c.peakDailyRequests)}</td>
-                          <td className="num">{fmtNum(c.totalRequests)}</td>
-                          <td className="num">
-                            {nl.tenantPool > 0
-                              ? `${((c.peakDailyRequests / nl.tenantPool) * 100).toFixed(1)}%`
-                              : '—'}
-                          </td>
-                          {nl.overrun > 0 && <td className="num">{licNeeded}</td>}
-                          {nl.overrun > 0 && pProc > 0 && <td className="num">{cost > 0 ? fmtCur(cost) : '—'}</td>}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {nl.overrun > 0 && (
-                <p className="settings-hint" style={{ marginTop: 6 }}>
-                  ⚠️ Process licenses are <strong>environment-specific</strong>. A flow calling across multiple environments needs one license per environment.
-                  The table above shows peak usage across all environments; open the Callers view for per-environment detail.
-                </p>
-              )}
-            </>
-          )}
-
           {/* Edge cases */}
           {nl.overrun === 0 && nl.tenantPool > 0 && (
             <p style={{ color: 'var(--green)', fontSize: '0.9em', marginTop: 4 }}>
@@ -494,68 +474,152 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
         </div>
       )}
 
-      {/* Compliance × Frequency breakdown table */}
+      {/* ── Breakdown table — day-status for non-licensed, pattern for others ── */}
       <div className="breakdown-section">
-        <h3>Compliance &amp; Licensing Breakdown by Usage Pattern</h3>
-        <div className="breakdown-scroll">
-          <table className="breakdown-table">
-            <thead>
-              <tr>
-                <th>Usage Pattern</th>
-                <th className="num">{entityLabel}</th>
-                <th className="num">Premium Lic.</th>
-                <th className="num">
-                  Premium Cost/mo
-                  <span className="col-sub">@ {fmtCur(pPrem)}/lic</span>
-                </th>
-                <th className="num">Process Lic.</th>
-                <th className="num">
-                  Process Cost/mo
-                  <span className="col-sub">@ {fmtCur(pProc)}/lic</span>
-                </th>
-                <th className="num">Monthly Total</th>
-                <th className="num">Annual Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rowData.map(({ key, group, premLic, procLic, monthly }) => {
-                const isSelected = patternFilter.includes(key);
-                return (
-                  <tr
-                    key={key}
-                    className={`breakdown-row ${PATTERN_CLASS[key]} breakdown-clickable ${isSelected ? 'breakdown-selected' : ''}`}
-                    onClick={(e) => onSelectPattern(key, e.ctrlKey || e.metaKey)}
-                    title={isSelected ? 'Click to deselect (Ctrl+click to multi-select)' : `Click to filter (Ctrl+click to add to selection)`}
-                  >
-                    <td>
-                      <span className={`pat-badge ${PATTERN_CLASS[key]}`}>{PATTERN_LABEL[key]}</span>
-                      {isSelected && <span className="pat-active-indicator"> ▸ filtered</span>}
-                    </td>
-                    <td className="num">{group.length}</td>
-                    <td className="num">{premLic > 0 ? premLic : '—'}</td>
-                    <td className="num">{premLic > 0 ? fmtCur(premLic * pPrem) : '—'}</td>
-                    <td className="num">{procLic > 0 ? procLic : '—'}</td>
-                    <td className="num">{procLic > 0 ? fmtCur(procLic * pProc) : '—'}</td>
-                    <td className="num bd-monthly">{monthly > 0 ? fmtCur(monthly) : '—'}</td>
-                    <td className="num bd-annual">{monthly > 0 ? fmtCur(monthly * 12) : '—'}</td>
+        {fileType === 'non-licensed' && nl && dayGroups ? (
+          <>
+            <h3>📅 Daily Consumption Breakdown by Status</h3>
+            <p style={{ fontSize: '0.82em', color: 'var(--text-muted)', margin: '-4px 0 10px' }}>
+              Costs shown are monthly estimates based on the peak day within each status group.
+              Add-ons and Process licenses are monthly subscriptions sized to your worst day.
+            </p>
+            <div className="breakdown-scroll">
+              <table className="breakdown-table">
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th className="num">Days</th>
+                    <th className="num">% of Period</th>
+                    <th className="num">Total Requests</th>
+                    <th className="num">Peak Req/Day</th>
+                    <th className="num">Add-on Cost/mo</th>
+                    {nl.addonsCapped && <th className="num">Process Lic.</th>}
+                    {nl.addonsCapped && <th className="num">Process Cost/mo</th>}
                   </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="breakdown-total">
-                <td><strong>Total</strong></td>
-                <td className="num"><strong>{s.usersAnalyzed}</strong></td>
-                <td className="num"><strong>{totPremLic || '—'}</strong></td>
-                <td className="num"><strong>{totPremLic > 0 ? fmtCur(totPremLic * pPrem) : '—'}</strong></td>
-                <td className="num"><strong>{totProcLic || '—'}</strong></td>
-                <td className="num"><strong>{totProcLic > 0 ? fmtCur(totProcLic * pProc) : '—'}</strong></td>
-                <td className="num bd-monthly"><strong>{fmtCur(totMonthly)}</strong></td>
-                <td className="num bd-annual"><strong>{fmtCur(totMonthly * 12)}</strong></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {([
+                    { key: 'cap',  label: '⚠ >10M',     clr: 'var(--red)',   cls: 'row-non-compliant' },
+                    { key: 'over', label: '⚠ Over pool', clr: '#c18e00',      cls: 'row-warning' },
+                    { key: 'high', label: '~ High',       clr: 'var(--amber)', cls: '' },
+                    { key: 'ok',   label: '✓ OK',         clr: 'var(--green)', cls: '' },
+                  ] as const).map(({ key, label, clr, cls }) => {
+                    const g = dayGroups[key];
+                    if (g.days === 0) return null;
+                    const addonCost = dgAddonCost(g.peak);
+                    const procLic   = dgProcessLic(g.peak);
+                    const procCost  = dgProcessCost(g.peak);
+                    return (
+                      <tr key={key} className={cls}>
+                        <td><span style={{ color: clr, fontWeight: 600 }}>{label}</span></td>
+                        <td className="num">{g.days}</td>
+                        <td className="num">{fmtPct1(g.days / nl.dailyTotals.length)}</td>
+                        <td className="num">{fmtNum(g.total)}</td>
+                        <td className="num" style={{ color: clr }}>{fmtNum(g.peak)}</td>
+                        <td className="num">
+                          {addonCost > 0
+                            ? <strong style={{ color: '#c18e00' }}>{fmtCur(addonCost)}</strong>
+                            : addonPrice === 0 && key !== 'ok' && key !== 'high'
+                            ? <em style={{ color: 'var(--text-muted)' }}>Set price ⚙️</em>
+                            : '—'}
+                        </td>
+                        {nl.addonsCapped && (
+                          <td className="num" style={{ color: procLic > 0 ? 'var(--red)' : 'var(--text-muted)' }}>
+                            {procLic > 0 ? procLic : '—'}
+                          </td>
+                        )}
+                        {nl.addonsCapped && (
+                          <td className="num">
+                            {procCost > 0
+                              ? <strong style={{ color: 'var(--red)' }}>{fmtCur(procCost)}</strong>
+                              : procLic > 0 && processPrice === 0
+                              ? <em style={{ color: 'var(--text-muted)' }}>Set price ⚙️</em>
+                              : '—'}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="breakdown-total">
+                    <td><strong>Total</strong></td>
+                    <td className="num"><strong>{nl.dailyTotals.length}</strong></td>
+                    <td className="num"><strong>100%</strong></td>
+                    <td className="num"><strong>{fmtNum(nl.dailyTotals.reduce((s, d) => s + d.requests, 0))}</strong></td>
+                    <td className="num"><strong>{fmtNum(nl.peakTenantRequests)}</strong></td>
+                    <td className="num bd-monthly"><strong>{nl.addonCostMonthly > 0 ? fmtCur(nl.addonCostMonthly) : '—'}</strong></td>
+                    {nl.addonsCapped && <td className="num"><strong>{nl.processLicensesNeeded > 0 ? nl.processLicensesNeeded : '—'}</strong></td>}
+                    {nl.addonsCapped && <td className="num bd-annual"><strong>{nl.processLicenseCostMonthly > 0 ? fmtCur(nl.processLicenseCostMonthly) : '—'}</strong></td>}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </>
+        ) : (
+          <>
+            <h3>Compliance &amp; Licensing Breakdown by Usage Pattern</h3>
+            <div className="breakdown-scroll">
+              <table className="breakdown-table">
+                <thead>
+                  <tr>
+                    <th>Usage Pattern</th>
+                    <th className="num">{entityLabel}</th>
+                    <th className="num">Premium Lic.</th>
+                    <th className="num">
+                      Premium Cost/mo
+                      <span className="col-sub">@ {fmtCur(pPrem)}/lic</span>
+                    </th>
+                    <th className="num">Process Lic.</th>
+                    <th className="num">
+                      Process Cost/mo
+                      <span className="col-sub">@ {fmtCur(pProc)}/lic</span>
+                    </th>
+                    <th className="num">Monthly Total</th>
+                    <th className="num">Annual Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rowData.map(({ key, group, premLic, procLic, monthly }) => {
+                    const isSelected = patternFilter.includes(key);
+                    return (
+                      <tr
+                        key={key}
+                        className={`breakdown-row ${PATTERN_CLASS[key]} breakdown-clickable ${isSelected ? 'breakdown-selected' : ''}`}
+                        onClick={(e) => onSelectPattern(key, e.ctrlKey || e.metaKey)}
+                        title={isSelected ? 'Click to deselect (Ctrl+click to multi-select)' : `Click to filter (Ctrl+click to add to selection)`}
+                      >
+                        <td>
+                          <span className={`pat-badge ${PATTERN_CLASS[key]}`}>{PATTERN_LABEL[key]}</span>
+                          {isSelected && <span className="pat-active-indicator"> ▸ filtered</span>}
+                        </td>
+                        <td className="num">{group.length}</td>
+                        <td className="num">{premLic > 0 ? premLic : '—'}</td>
+                        <td className="num">{premLic > 0 ? fmtCur(premLic * pPrem) : '—'}</td>
+                        <td className="num">{procLic > 0 ? procLic : '—'}</td>
+                        <td className="num">{procLic > 0 ? fmtCur(procLic * pProc) : '—'}</td>
+                        <td className="num bd-monthly">{monthly > 0 ? fmtCur(monthly) : '—'}</td>
+                        <td className="num bd-annual">{monthly > 0 ? fmtCur(monthly * 12) : '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="breakdown-total">
+                    <td><strong>Total</strong></td>
+                    <td className="num"><strong>{s.usersAnalyzed}</strong></td>
+                    <td className="num"><strong>{totPremLic || '—'}</strong></td>
+                    <td className="num"><strong>{totPremLic > 0 ? fmtCur(totPremLic * pPrem) : '—'}</strong></td>
+                    <td className="num"><strong>{totProcLic || '—'}</strong></td>
+                    <td className="num"><strong>{totProcLic > 0 ? fmtCur(totProcLic * pProc) : '—'}</strong></td>
+                    <td className="num bd-monthly"><strong>{fmtCur(totMonthly)}</strong></td>
+                    <td className="num bd-annual"><strong>{fmtCur(totMonthly * 12)}</strong></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

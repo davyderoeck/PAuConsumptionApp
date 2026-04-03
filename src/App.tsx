@@ -302,7 +302,7 @@ function App() {
 
           {activeView !== 'help' && summary && status === 'complete' && (
             <>
-              <SummaryDashboard summary={summary} users={users} patternFilter={patternFilter} onSelectPattern={(p, multi) => { setPatternFilter(prev => { if (multi) { return prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]; } else { return prev.length === 1 && prev[0] === p ? [] : [p]; } }); setActiveView('users'); }} fileType={fileType} premiumPrice={premiumPrice} processPrice={processPrice} currency={currency} tenantEntitlement={tenantEntitlement} nonLicensedAnalysis={nonLicensedAnalysis} />
+              <SummaryDashboard summary={summary} users={users} patternFilter={patternFilter} onSelectPattern={(p, multi) => { setPatternFilter(prev => { if (multi) { return prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]; } else { return prev.length === 1 && prev[0] === p ? [] : [p]; } }); setActiveView('users'); }} fileType={fileType} premiumPrice={premiumPrice} processPrice={processPrice} addonPrice={tenantPoolConfig.requestAddonPrice} currency={currency} tenantEntitlement={tenantEntitlement} nonLicensedAnalysis={nonLicensedAnalysis} />
 
               {activeView === 'users' && (
                 <UsersTable users={users} onSelectUser={handleSelectUser} patternFilter={patternFilter} fileType={fileType} />
