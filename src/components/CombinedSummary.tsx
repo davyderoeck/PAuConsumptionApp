@@ -126,7 +126,12 @@ export default function CombinedSummary({ loadedFiles, premiumPrice, processPric
         <div className="combined-kpi combined-kpi-total">
           <span className="combined-kpi-value combined-kpi-blue">{fmt(totalMonthlyCost, currency)}</span>
           <span className="combined-kpi-label">TOTAL MONTHLY</span>
-          <span className="combined-kpi-sub">{fmt(totalAnnualCost, currency)}/yr</span>
+          <span className="combined-kpi-sub">all license types combined</span>
+        </div>
+        <div className="combined-kpi combined-kpi-annual">
+          <span className="combined-kpi-value combined-kpi-annual-value">{fmt(totalAnnualCost, currency)}</span>
+          <span className="combined-kpi-label">TOTAL ANNUAL OPPORTUNITY</span>
+          <span className="combined-kpi-sub">{fmt(totalMonthlyCost, currency)}/mo × 12</span>
         </div>
       </div>
 

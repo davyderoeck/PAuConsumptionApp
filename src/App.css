@@ -2177,3 +2177,15 @@ tbody td {
   color: var(--text-muted);
 }
 .cleg-item strong { color: var(--text); }
+
+/* Annual opportunity pill */
+.combined-kpi-annual {
+  border-color: #58a6ff;
+  background: rgba(47,129,247,0.08);
+}
+.combined-kpi-annual-value {
+  font-size: 1.8em;
+  font-weight: 800;
+  color: #58a6ff;
+  line-height: 1;
+}
