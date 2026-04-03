@@ -375,7 +375,7 @@ export default function DaysView({ analysis: nl, rawRows, addonPrice, processPri
                           : isOverDay
                           ? <span style={{ color: '#c18e00', fontWeight: 600 }}>⚠ Over</span>
                           : pct > 0.8
-                          ? <span style={{ color: 'var(--amber)' }}>~ High</span>
+                          ? <span style={{ color: 'var(--green)' }}>~ High</span>
                           : <span style={{ color: 'var(--green)' }}>✓ OK</span>}
                       </td>
                     </tr>

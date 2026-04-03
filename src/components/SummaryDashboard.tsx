@@ -501,7 +501,7 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
                   {([
                     { key: 'cap',  label: '⚠ >10M',     clr: 'var(--red)',   cls: 'row-non-compliant' },
                     { key: 'over', label: '⚠ Over pool', clr: '#c18e00',      cls: 'row-warning' },
-                    { key: 'high', label: '~ High',       clr: 'var(--amber)', cls: '' },
+                    { key: 'high', label: '~ High',       clr: 'var(--green)', cls: '' },
                     { key: 'ok',   label: '✓ OK',         clr: 'var(--green)', cls: '' },
                   ] as const).map(({ key, label, clr, cls }) => {
                     const g = dayGroups[key];
