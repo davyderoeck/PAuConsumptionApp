@@ -56,11 +56,17 @@ export default function UsersTable({ users, onSelectUser, patternFilter, fileTyp
     <th onClick={() => handleSort(field)}>{label}{si(field)}</th>
   );
 
-  const recBadge = (r: string, compliant: boolean) => {
-    if (r === 'Downgrade to Premium') return <span className="badge badge-downgrade">⬇ Downgrade</span>;
-    if (!compliant && r === 'Covered') return <span className="badge badge-warning">Non-Compliant</span>;
-    if (r === 'Process') return <span className="badge badge-non-compliant">Process</span>;
-    if (r === 'Premium') return <span className="badge badge-warning">Premium</span>;
+  const recBadge = (u: ClassifiedUser) => {
+    // Non-licensed: pool coverage status drives the badge
+    if (isNonLicensed) {
+      if (u.poolCoverageStatus === 'overrun')  return <span className="badge badge-non-compliant">⚠️ Pool overrun</span>;
+      if (u.poolCoverageStatus === 'warning')  return <span className="badge badge-warning">⚠️ Near limit</span>;
+      return <span className="badge badge-covered">Covered</span>;
+    }
+    if (u.recommendation === 'Downgrade to Premium') return <span className="badge badge-downgrade">⬇ Downgrade</span>;
+    if (!u.compliant && u.recommendation === 'Covered') return <span className="badge badge-warning">Non-Compliant</span>;
+    if (u.recommendation === 'Process') return <span className="badge badge-non-compliant">Process</span>;
+    if (u.recommendation === 'Premium') return <span className="badge badge-warning">Premium</span>;
     return <span className="badge badge-compliant">Covered</span>;
   };
 
@@ -134,9 +140,18 @@ export default function UsersTable({ users, onSelectUser, patternFilter, fileTyp
             {paged.map((u, i) => (
               <tr
                 key={u.callerId + i}
-                className={`clickable-row ${u.recommendation === 'Process' ? 'row-non-compliant' : u.recommendation === 'Premium' ? 'row-warning' : u.recommendation === 'Downgrade to Premium' ? 'row-downgrade' : ''}`}
+                className={`clickable-row ${
+                  isNonLicensed
+                    ? u.poolCoverageStatus === 'overrun'  ? 'row-non-compliant'
+                      : u.poolCoverageStatus === 'warning' ? 'row-warning'
+                      : ''
+                    : u.recommendation === 'Process'            ? 'row-non-compliant'
+                      : u.recommendation === 'Premium'           ? 'row-warning'
+                      : u.recommendation === 'Downgrade to Premium' ? 'row-downgrade'
+                      : ''
+                }`}
                 onClick={() => onSelectUser(u)}
-                  title={`Click to drill into ${isPerFlow ? 'flow' : isNonLicensed ? 'caller' : 'user'} detail`}
+                title={`Click to drill into ${isPerFlow ? 'flow' : isNonLicensed ? 'caller' : 'user'} detail`}
               >
                 <td title={u.callerId} className="caller-cell">
                   {u.callerId}
@@ -146,7 +161,7 @@ export default function UsersTable({ users, onSelectUser, patternFilter, fileTyp
                     </span>
                   )}
                 </td>
-                <td>{recBadge(u.recommendation, u.compliant)}</td>
+                <td>{recBadge(u)}</td>
                 <td className="insight-cell" title={u.frequencyInsight || undefined}>
                   {u.frequencyLabel ? (
                     <span className={`insight-label insight-${

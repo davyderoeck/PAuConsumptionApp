@@ -56,6 +56,8 @@ export interface ClassifiedUser {
   totalDays: number;          // total days with any activity
   frequencyInsight: string;   // human-readable frequency recommendation (full)
   frequencyLabel: string;     // short conclusion label for table column
+  /** Non-licensed only: position in bottom-up pool allocation */
+  poolCoverageStatus?: 'covered' | 'warning' | 'overrun';
 }
 
 /** Seller-focused summary for the dashboard */

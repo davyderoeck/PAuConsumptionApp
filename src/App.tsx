@@ -75,6 +75,7 @@ function App() {
         premiumPrice,
         processPrice,
         parseResult.fileType,
+        parseResult.tenantEntitlement,
       )
       const envSummaries = buildEnvironmentSummary(parseResult.rows, parseResult.fileType)
 

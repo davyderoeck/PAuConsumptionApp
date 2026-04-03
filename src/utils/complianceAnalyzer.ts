@@ -34,14 +34,42 @@ export function analyzeConsumption(
   premiumPrice = DEFAULT_PREMIUM_PRICE_MONTHLY,
   processPrice = DEFAULT_PROCESS_PRICE_MONTHLY,
   fileType: FileType = 'per-user',
+  tenantPool?: number,
 ): { users: ClassifiedUser[]; summary: SellerSummary } {
   const userMap = aggregateByUser(rows);
-  const users = Array.from(userMap.values())
-    .map(u => classifyUser(u, fileType))
-    .sort((a, b) =>
-      b.peakDailyRequests - a.peakDailyRequests ||
-      b.totalRequests - a.totalRequests
-    );
+  let classified = Array.from(userMap.values())
+    .map(u => classifyUser(u, fileType));
+
+  // For non-licensed: allocate pool bottom-up (smallest callers covered first).
+  // A caller is 'covered' while cumulative peak ≤ pool, 'warning' up to 110%, 'overrun' above.
+  if (fileType === 'non-licensed' && tenantPool && tenantPool > 0) {
+    const asc = [...classified].sort((a, b) => a.peakDailyRequests - b.peakDailyRequests);
+    let cumulative = 0;
+    const statusMap = new Map<string, 'covered' | 'warning' | 'overrun'>();
+    for (const u of asc) {
+      cumulative += u.peakDailyRequests;
+      const pct = cumulative / tenantPool;
+      statusMap.set(u.callerId, pct <= 1.0 ? 'covered' : pct <= 1.1 ? 'warning' : 'overrun');
+    }
+    classified = classified.map(u => {
+      const poolCoverageStatus = statusMap.get(u.callerId) ?? 'covered';
+      if (poolCoverageStatus === 'covered') return { ...u, poolCoverageStatus };
+      return {
+        ...u,
+        poolCoverageStatus,
+        compliant: false,
+        frequencyLabel: poolCoverageStatus === 'warning' ? 'Monitor first' : 'License recommended',
+        frequencyInsight: poolCoverageStatus === 'warning'
+          ? `Cumulative pool usage enters 100–110% range — borderline overrun`
+          : `Caller pushes tenant pool above 110% — tenant-level remediation needed`,
+      };
+    });
+  }
+
+  const users = classified.sort((a, b) =>
+    b.peakDailyRequests - a.peakDailyRequests ||
+    b.totalRequests - a.totalRequests
+  );
 
   const premiumUsers = users.filter(u => u.additionalPremiumRequired > 0);
   const processUsers = users.filter(u => u.totalProcessLicensesRequired > 0);
