@@ -110,5 +110,37 @@ export const PROCESS_CAPACITY_UNIT = 250000;
 export const DEFAULT_PREMIUM_PRICE_MONTHLY = 15.0;
 export const DEFAULT_PROCESS_PRICE_MONTHLY = 150.0;
 
+/** Non-licensed tenant pool constants (Microsoft licensing rules) */
+export const D365_POOL_BASE = 500_000;          // base pool with qualifying D365 Enterprise/Pro licenses
+export const D365_PER_USER_ACCRUAL = 5_000;     // additional requests per qualifying D365 base seat
+export const D365_POOL_CAP = 10_000_000;        // max tenant pool (hard cap)
+export const REQUEST_ADDON_CAPACITY = 50_000;   // requests added per PP Request capacity add-on/day
+
+/** Configuration for non-licensed tenant pool (entered by user in Settings) */
+export interface TenantPoolConfig {
+  /** Price per Power Platform Request capacity add-on per month */
+  requestAddonPrice: number;
+}
+
+/** Tenant-level overrun analysis for non-licensed callers */
+export interface NonLicensedTenantAnalysis {
+  tenantPool: number;
+  peakTenantDay: string;
+  peakTenantRequests: number;
+  dailyTotals: { date: string; requests: number }[];
+  overrun: number;
+  /** PP Request add-ons needed to cover overrun (50k/add-on) */
+  addonsNeeded: number;
+  /** Monthly cost to cover overrun with add-ons */
+  addonCostMonthly: number;
+  /** Top callers by peak daily usage — candidates for Process licenses to remove from pool */
+  topCallers: {
+    callerId: string;
+    callerType?: string;
+    peakDailyRequests: number;
+    totalRequests: number;
+  }[];
+}
+
 export type ProcessingStatus = 'idle' | 'parsing' | 'analyzing' | 'complete' | 'error';
 

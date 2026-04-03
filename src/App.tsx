@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react'
 import './App.css'
-import type { ClassifiedUser, EnvironmentSummary, FileType, ProcessingStatus, RawApiRow, SellerSummary, UserDrillDownData } from './types'
+import type { ClassifiedUser, EnvironmentSummary, FileType, NonLicensedTenantAnalysis, ProcessingStatus, RawApiRow, SellerSummary, TenantPoolConfig, UserDrillDownData } from './types'
 import { DEFAULT_PREMIUM_PRICE_MONTHLY, DEFAULT_PROCESS_PRICE_MONTHLY } from './types'
 import { parseFile } from './utils/fileParser'
-import { analyzeConsumption, buildDrillDown, buildEnvironmentSummary } from './utils/complianceAnalyzer'
+import { analyzeConsumption, buildDrillDown, buildEnvironmentSummary, analyzeNonLicensedTenant } from './utils/complianceAnalyzer'
 import { generateReport } from './utils/reportGenerator'
 import FileUpload from './components/FileUpload'
 import SummaryDashboard from './components/SummaryDashboard'
@@ -35,6 +35,8 @@ function App() {
   const [patternFilter, setPatternFilter] = useState<string[]>([])
   const [fileType, setFileType] = useState<FileType>('per-user')
   const [tenantEntitlement, setTenantEntitlement] = useState<number | undefined>(undefined)
+  const [tenantPoolConfig, setTenantPoolConfig] = useState<TenantPoolConfig>({ requestAddonPrice: 0 })
+  const [nonLicensedAnalysis, setNonLicensedAnalysis] = useState<NonLicensedTenantAnalysis | null>(null)
 
   const handleFileSelected = useCallback(async (file: File) => {
     setError(null)
@@ -76,12 +78,18 @@ function App() {
       )
       const envSummaries = buildEnvironmentSummary(parseResult.rows, parseResult.fileType)
 
+      // Tenant-level analysis for non-licensed callers
+      const nlAnalysis = parseResult.fileType === 'non-licensed'
+        ? analyzeNonLicensedTenant(parseResult.rows, tenantPoolConfig, parseResult.tenantEntitlement)
+        : null
+
       setProgress(100)
       setProgressLabel('Complete!')
       setRawRows(parseResult.rows)
       setUsers(analyzedUsers)
       setSummary(analyzedSummary)
       setEnvironments(envSummaries)
+      setNonLicensedAnalysis(nlAnalysis)
       setStatus('complete')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred')
@@ -102,6 +110,7 @@ function App() {
     setEnvDrillDown(null)
     setActiveView('users')
     setTenantEntitlement(undefined)
+    setNonLicensedAnalysis(null)
   }, [])
 
   const handleDownload = useCallback(() => {
@@ -273,7 +282,7 @@ function App() {
 
           {activeView !== 'help' && summary && status === 'complete' && (
             <>
-              <SummaryDashboard summary={summary} users={users} patternFilter={patternFilter} onSelectPattern={(p, multi) => { setPatternFilter(prev => { if (multi) { return prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]; } else { return prev.length === 1 && prev[0] === p ? [] : [p]; } }); setActiveView('users'); }} fileType={fileType} premiumPrice={premiumPrice} processPrice={processPrice} currency={currency} tenantEntitlement={tenantEntitlement} />
+              <SummaryDashboard summary={summary} users={users} patternFilter={patternFilter} onSelectPattern={(p, multi) => { setPatternFilter(prev => { if (multi) { return prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]; } else { return prev.length === 1 && prev[0] === p ? [] : [p]; } }); setActiveView('users'); }} fileType={fileType} premiumPrice={premiumPrice} processPrice={processPrice} currency={currency} tenantEntitlement={tenantEntitlement} nonLicensedAnalysis={nonLicensedAnalysis} />
 
               {activeView === 'users' && (
                 <UsersTable users={users} onSelectUser={handleSelectUser} patternFilter={patternFilter} fileType={fileType} />
@@ -312,9 +321,18 @@ function App() {
           premiumPrice={premiumPrice}
           processPrice={processPrice}
           currency={currency}
+          fileType={fileType}
+          tenantPoolConfig={tenantPoolConfig}
           onPremiumPrice={setPremiumPrice}
           onProcessPrice={setProcessPrice}
           onCurrency={setCurrency}
+          onTenantPoolConfig={(cfg) => {
+            setTenantPoolConfig(cfg)
+            // Re-run tenant analysis immediately when config changes
+            if (fileType === 'non-licensed' && rawRows.length > 0) {
+              setNonLicensedAnalysis(analyzeNonLicensedTenant(rawRows, cfg, tenantEntitlement))
+            }
+          }}
           onClose={() => setShowSettings(false)}
         />
       )}
