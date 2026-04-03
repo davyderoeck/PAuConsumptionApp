@@ -34,6 +34,7 @@ function App() {
   const [currency, setCurrency] = useState('USD')
   const [patternFilter, setPatternFilter] = useState<string[]>([])
   const [fileType, setFileType] = useState<FileType>('per-user')
+  const [tenantEntitlement, setTenantEntitlement] = useState<number | undefined>(undefined)
 
   const handleFileSelected = useCallback(async (file: File) => {
     setError(null)
@@ -58,6 +59,7 @@ function App() {
       }
 
       setFileType(parseResult.fileType)
+      setTenantEntitlement(parseResult.tenantEntitlement)
 
       setStatus('analyzing')
       setProgressLabel('Analyzing consumption...')
@@ -99,6 +101,7 @@ function App() {
     setDrillDown(null)
     setEnvDrillDown(null)
     setActiveView('users')
+    setTenantEntitlement(undefined)
   }, [])
 
   const handleDownload = useCallback(() => {
@@ -231,7 +234,7 @@ function App() {
                 <button
                   className={`view-tab ${activeView === 'users' ? 'active' : ''}`}
                   onClick={() => setActiveView('users')}
-                >{fileType === 'per-flow' ? '⚡ Flows' : '👥 Users'}</button>
+                >{fileType === 'per-flow' ? '⚡ Flows' : fileType === 'non-licensed' ? '👤 Callers' : '👥 Users'}</button>
                 <button
                   className={`view-tab ${activeView === 'environments' ? 'active' : ''}`}
                   onClick={() => setActiveView('environments')}
@@ -270,7 +273,7 @@ function App() {
 
           {activeView !== 'help' && summary && status === 'complete' && (
             <>
-              <SummaryDashboard summary={summary} users={users} patternFilter={patternFilter} onSelectPattern={(p, multi) => { setPatternFilter(prev => { if (multi) { return prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]; } else { return prev.length === 1 && prev[0] === p ? [] : [p]; } }); setActiveView('users'); }} fileType={fileType} premiumPrice={premiumPrice} processPrice={processPrice} currency={currency} />
+              <SummaryDashboard summary={summary} users={users} patternFilter={patternFilter} onSelectPattern={(p, multi) => { setPatternFilter(prev => { if (multi) { return prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]; } else { return prev.length === 1 && prev[0] === p ? [] : [p]; } }); setActiveView('users'); }} fileType={fileType} premiumPrice={premiumPrice} processPrice={processPrice} currency={currency} tenantEntitlement={tenantEntitlement} />
 
               {activeView === 'users' && (
                 <UsersTable users={users} onSelectUser={handleSelectUser} patternFilter={patternFilter} fileType={fileType} />
@@ -288,9 +291,9 @@ function App() {
             ⚠️ <strong>Disclaimer:</strong> This tool is <strong>not</strong> an official Microsoft product. All analysis results are estimates based on exported data and may contain inaccuracies. Always refer to official Microsoft documentation and consult with a licensing specialist for compliance decisions.
           </div>
           <div className="footer-meta">
-            <span>v1.0.0</span>
+            <span>v1.0.1</span>
             <span className="footer-sep">·</span>
-            <span>Built 2026-03-13</span>
+            <span>Built 2026-04-03</span>
             <span className="footer-sep">·</span>
             <span>Community tool — not affiliated with Microsoft</span>
           </div>

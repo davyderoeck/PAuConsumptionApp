@@ -252,6 +252,54 @@ export default function UserDrillDown({ data, onClose, fileType }: UserDrillDown
           </div>
         </div>
 
+        {/* Per-environment process license breakdown */}
+        {Object.keys(u.processLicensesPerEnv).length > 0 && (
+          <div className="dd-section dd-env-process-section">
+            <h3 className="dd-section-title">⚙️ Process Licenses by Environment</h3>
+            <p className="dd-section-sub">
+              Process licenses are <strong>environment-specific</strong> in Power Automate — each environment where usage exceeds
+              {isPerFlow ? ' 250k/day' : ' 40k/day'} requires its own Process capacity assignment.
+            </p>
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Environment</th>
+                    <th className="num">Peak Daily (this env)</th>
+                    <th className="num">Process Lic. Needed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(u.processLicensesPerEnv)
+                    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+                    .map(([env, lic]) => {
+                      // Derive per-env peak from the matrix already in drill-down data
+                      const envPeak = allDates.reduce(
+                        (max, d) => Math.max(max, matrix[env]?.[d] ?? 0), 0
+                      );
+                      return (
+                        <tr key={env} className="row-non-compliant">
+                          <td title={env}>{env}</td>
+                          <td className="num">{envPeak.toLocaleString()}</td>
+                          <td className="num">
+                            <span className="badge badge-process">{lic} × 250k</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td><strong>Total</strong></td>
+                    <td className="num">—</td>
+                    <td className="num"><strong>{u.totalProcessLicensesRequired} Process license{u.totalProcessLicensesRequired !== 1 ? 's' : ''}</strong></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Frequency insight */}
         {(() => {
           if (isPerFlow) {

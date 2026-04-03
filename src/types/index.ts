@@ -9,7 +9,7 @@ export interface RawApiRow {
   powerAutomateRequests: number;
 }
 
-export type FileType = 'per-user' | 'per-flow';
+export type FileType = 'per-user' | 'per-flow' | 'non-licensed';
 
 /** Aggregated daily usage for one user on one calendar date */
 export interface DailyUsage {
@@ -21,15 +21,19 @@ export interface DailyUsage {
 /** All usage data for a single user (Caller ID) */
 export interface UserUsage {
   callerId: string;
+  callerType?: string;   // 'Service Principal', 'User', etc. (non-licensed files)
   totalRequests: number;
   maxEntitledQuantity: number;
   environments: string[];
+  /** Peak daily requests per environment — used for env-specific process license calculation */
+  envPeakRequests: Record<string, number>;
   dailyUsage: Record<string, DailyUsage>;
 }
 
 /** Fully classified user result (matches Python classify_user output) */
 export interface ClassifiedUser {
   callerId: string;
+  callerType?: string;   // 'Service Principal', 'User', etc. (non-licensed files only)
   environmentCount: number;
   environments: string;
   totalRequests: number;
@@ -44,6 +48,8 @@ export interface ClassifiedUser {
   additionalPremiumRequired: number;
   totalProcessLicensesRequired: number;
   incrementalProcessLicensesNeeded: number;
+  /** Process licenses broken down per environment (Process licenses are env-specific in Power Automate) */
+  processLicensesPerEnv: Record<string, number>;
   daysOverStandard: number;   // days in period where daily total > 8k (needs Premium)
   daysOverPremium: number;    // days in period where daily total > 40k (needs Process)
   daysUnderPremium: number;   // days in period where daily total ≤ 40k (per-flow downgrade indicator)

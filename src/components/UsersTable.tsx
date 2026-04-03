@@ -65,8 +65,9 @@ export default function UsersTable({ users, onSelectUser, patternFilter, fileTyp
   };
 
   const isPerFlow = fileType === 'per-flow';
-  const entityLabel = isPerFlow ? 'Flow' : 'User';
-  const entitiesLabel = isPerFlow ? 'Flows' : 'Users';
+  const isNonLicensed = fileType === 'non-licensed';
+  const entityLabel = isPerFlow ? 'Flow' : isNonLicensed ? 'Caller' : 'User';
+  const entitiesLabel = isPerFlow ? 'Flows' : isNonLicensed ? 'Callers' : 'Users';
 
   // Counts reflect active pattern + search filters so the dropdown is accurate
   const counts = {
@@ -79,7 +80,7 @@ export default function UsersTable({ users, onSelectUser, patternFilter, fileTyp
 
   return (
     <div className="users-table-section">
-      <h2>{isPerFlow ? '⚡ Flow Detail' : '👥 User Detail'}</h2>
+      <h2>{isPerFlow ? '⚡ Flow Detail' : isNonLicensed ? '👤 Caller Detail' : '👥 User Detail'}</h2>
       <div className="table-controls">
         <input
           type="text" placeholder={`Search ${isPerFlow ? 'flow' : 'caller'} ID...`} value={search}
@@ -112,7 +113,7 @@ export default function UsersTable({ users, onSelectUser, patternFilter, fileTyp
         <table>
           <thead>
             <tr>
-              {th(isPerFlow ? 'Flow ID' : 'Caller ID', 'callerId')}
+              {th(isPerFlow ? 'Flow ID' : isNonLicensed ? 'Caller ID / Type' : 'Caller ID', 'callerId')}
               {th('Recommendation', 'recommendation')}
               {th('Analysis', 'frequencyLabel')}
               {th('Compliant', 'compliant')}
@@ -135,9 +136,16 @@ export default function UsersTable({ users, onSelectUser, patternFilter, fileTyp
                 key={u.callerId + i}
                 className={`clickable-row ${u.recommendation === 'Process' ? 'row-non-compliant' : u.recommendation === 'Premium' ? 'row-warning' : u.recommendation === 'Downgrade to Premium' ? 'row-downgrade' : ''}`}
                 onClick={() => onSelectUser(u)}
-                title={`Click to drill into ${isPerFlow ? 'flow' : 'user'} detail`}
+                  title={`Click to drill into ${isPerFlow ? 'flow' : isNonLicensed ? 'caller' : 'user'} detail`}
               >
-                <td title={u.callerId} className="caller-cell">{u.callerId}</td>
+                <td title={u.callerId} className="caller-cell">
+                  {u.callerId}
+                  {isNonLicensed && u.callerType && (
+                    <span style={{ marginLeft: 6, fontSize: '0.75em', color: 'var(--text-muted)', fontWeight: 400 }}>
+                      [{u.callerType}]
+                    </span>
+                  )}
+                </td>
                 <td>{recBadge(u.recommendation, u.compliant)}</td>
                 <td className="insight-cell" title={u.frequencyInsight || undefined}>
                   {u.frequencyLabel ? (

@@ -10,6 +10,7 @@ interface SummaryDashboardProps {
   premiumPrice: number;
   processPrice: number;
   currency: string;
+  tenantEntitlement?: number;
 }
 
 type PatternKey = 'License recommended' | 'Moderate pattern' | 'Occasional spike' | 'Monitor first' | 'Compliant' | 'Downgrade candidate';
@@ -32,9 +33,9 @@ const PATTERN_CLASS: Record<PatternKey, string> = {
   'Compliant':           'pat-ok',
 };
 
-export default function SummaryDashboard({ summary: s, users, patternFilter, onSelectPattern, fileType, premiumPrice, processPrice, currency }: SummaryDashboardProps) {
+export default function SummaryDashboard({ summary: s, users, patternFilter, onSelectPattern, fileType, premiumPrice, processPrice, currency, tenantEntitlement }: SummaryDashboardProps) {
   const isPerFlow = fileType === 'per-flow';
-  const entityLabel = isPerFlow ? 'Flows' : 'Users';
+  const entityLabel = isPerFlow ? 'Flows' : fileType === 'non-licensed' ? 'Callers' : 'Users';
   const complianceRate = s.usersAnalyzed > 0
     ? ((s.compliantUsers / s.usersAnalyzed) * 100).toFixed(1)
     : '0';
@@ -78,6 +79,11 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
         <div>
           <h2>📊 Analysis Summary</h2>
           <p className="date-range">Period: {s.dateRange}</p>
+          {tenantEntitlement !== undefined && (
+            <p className="date-range" style={{ marginTop: 2, color: 'var(--text-muted)', fontSize: '0.8em' }}>
+              🏢 Tenant pool: {tenantEntitlement.toLocaleString()} req/day shared across non-licensed callers
+            </p>
+          )}
         </div>
         <div className="summary-top-actions">
           <button className="btn-export-small"
@@ -121,7 +127,7 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
             <thead>
               <tr>
                 <th>Usage Pattern</th>
-                <th className="num">Users</th>
+                <th className="num">{entityLabel}</th>
                 <th className="num">Premium Lic.</th>
                 <th className="num">
                   Premium Cost/mo

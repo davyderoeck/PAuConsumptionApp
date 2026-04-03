@@ -34,7 +34,7 @@ function EnvTrendChart({ env }: { env: EnvironmentSummary }) {
 
 export default function EnvironmentView({ environments, onSelectEnv, fileType }: EnvironmentViewProps) {
   const isPerFlow = fileType === 'per-flow';
-  const entityLabel = isPerFlow ? 'Flows' : 'Users';
+  const entityLabel = isPerFlow ? 'Flows' : fileType === 'non-licensed' ? 'Callers' : 'Users';
   const [search, setSearch] = useState('');
 
   const filtered = environments.filter(e =>

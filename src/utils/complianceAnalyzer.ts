@@ -72,6 +72,8 @@ export function analyzeConsumption(
 /** Aggregate raw CSV rows by Caller ID, summing requests per calendar day */
 function aggregateByUser(rows: RawApiRow[]): Map<string, UserUsage> {
   const map = new Map<string, UserUsage>();
+  // Temporary: callerId → envName → date → total requests (used to compute per-env peak)
+  const envDailyWork = new Map<string, Map<string, Map<string, number>>>();
 
   for (const row of rows) {
     if (!row.callerId) continue;
@@ -83,9 +85,16 @@ function aggregateByUser(rows: RawApiRow[]): Map<string, UserUsage> {
         totalRequests: 0,
         maxEntitledQuantity: 0,
         environments: [],
+        envPeakRequests: {},
         dailyUsage: {},
       };
       map.set(row.callerId, usage);
+      envDailyWork.set(row.callerId, new Map());
+    }
+
+    // Track caller type (e.g. 'Service Principal') from non-licensed files
+    if (!usage.callerType && row.callerType) {
+      usage.callerType = row.callerType;
     }
 
     usage.totalRequests += row.powerAutomateRequests;
@@ -94,6 +103,14 @@ function aggregateByUser(rows: RawApiRow[]): Map<string, UserUsage> {
     const env = row.environmentName || row.environmentId;
     if (env && !usage.environments.includes(env)) {
       usage.environments.push(env);
+    }
+
+    // Per-env daily tracking
+    if (env) {
+      const callerEnvMap = envDailyWork.get(row.callerId)!;
+      if (!callerEnvMap.has(env)) callerEnvMap.set(env, new Map());
+      const envDateMap = callerEnvMap.get(env)!;
+      envDateMap.set(row.usageDate, (envDateMap.get(row.usageDate) ?? 0) + row.powerAutomateRequests);
     }
 
     const daily = usage.dailyUsage[row.usageDate] ?? {
@@ -106,6 +123,15 @@ function aggregateByUser(rows: RawApiRow[]): Map<string, UserUsage> {
     usage.dailyUsage[row.usageDate] = daily;
   }
 
+  // Derive per-env peak from the working map
+  for (const [callerId, callerEnvMap] of envDailyWork) {
+    const usage = map.get(callerId)!;
+    for (const [env, envDateMap] of callerEnvMap) {
+      const peak = Math.max(...envDateMap.values());
+      if (peak > 0) usage.envPeakRequests[env] = peak;
+    }
+  }
+
   return map;
 }
 
@@ -115,6 +141,7 @@ function classifyUser(usage: UserUsage, fileType: FileType): ClassifiedUser {
   if (days.length === 0) {
     return {
       callerId: usage.callerId,
+      callerType: usage.callerType,
       environmentCount: usage.environments.length,
       environments: usage.environments.join('; '),
       totalRequests: 0,
@@ -129,6 +156,7 @@ function classifyUser(usage: UserUsage, fileType: FileType): ClassifiedUser {
       additionalPremiumRequired: 0,
       totalProcessLicensesRequired: 0,
       incrementalProcessLicensesNeeded: 0,
+      processLicensesPerEnv: {},
       daysOverStandard: 0,
       daysOverPremium: 0,
       daysUnderPremium: 0,
@@ -152,13 +180,16 @@ function classifyUser(usage: UserUsage, fileType: FileType): ClassifiedUser {
     const compliant = peakDailyRequests <= entitlement;
     const capacityGapRequests = Math.max(peakDailyRequests - entitlement, 0);
 
-    // Additional process licenses if exceeding 250K
-    const totalProcessLicensesRequired = peakDailyRequests > entitlement
-      ? Math.ceil(peakDailyRequests / PROCESS_CAPACITY_UNIT)
-      : 0;
-    const incrementalProcessLicensesNeeded = peakDailyRequests > entitlement
-      ? Math.ceil((peakDailyRequests - entitlement) / PROCESS_CAPACITY_UNIT)
-      : 0;
+    // Process licenses are environment-specific: calculate per env
+    const processLicensesPerEnv: Record<string, number> = {};
+    for (const [env, envPeak] of Object.entries(usage.envPeakRequests)) {
+      if (envPeak > entitlement) {
+        processLicensesPerEnv[env] = Math.ceil(envPeak / PROCESS_CAPACITY_UNIT);
+      }
+    }
+    const totalProcessLicensesRequired = Object.values(processLicensesPerEnv).reduce((s, v) => s + v, 0);
+    // Each env needs its own process license — no cross-env credit
+    const incrementalProcessLicensesNeeded = totalProcessLicensesRequired;
 
     // Could this flow run on a Premium license instead? (peak ≤ 40K)
     const canDowngrade = peakDailyRequests <= PREMIUM_CAPACITY;
@@ -198,6 +229,7 @@ function classifyUser(usage: UserUsage, fileType: FileType): ClassifiedUser {
 
     return {
       callerId: usage.callerId,
+      callerType: usage.callerType,
       environmentCount: usage.environments.length,
       environments: usage.environments.sort().join('; '),
       totalRequests: usage.totalRequests,
@@ -212,6 +244,7 @@ function classifyUser(usage: UserUsage, fileType: FileType): ClassifiedUser {
       additionalPremiumRequired: 0,
       totalProcessLicensesRequired,
       incrementalProcessLicensesNeeded,
+      processLicensesPerEnv,
       daysOverStandard: 0,  // not applicable for per-flow
       daysOverPremium: daysOverEntitlement,  // repurposed: days > 250K for per-flow
       daysUnderPremium,
@@ -223,16 +256,16 @@ function classifyUser(usage: UserUsage, fileType: FileType): ClassifiedUser {
 
   // --- Per-user logic (original) ---
 
-  // Total process licenses required = ceil(peak / 250k) if peak > 40k
-  const totalProcessLicensesRequired = peakDailyRequests > PREMIUM_CAPACITY
-    ? Math.ceil(peakDailyRequests / PROCESS_CAPACITY_UNIT)
-    : 0;
-
-  // Incremental process licenses needed above the entitled capacity
-  const entitledCapacity = Math.max(PREMIUM_CAPACITY, usage.maxEntitledQuantity);
-  const incrementalProcessLicensesNeeded = peakDailyRequests > entitledCapacity
-    ? Math.ceil((peakDailyRequests - entitledCapacity) / PROCESS_CAPACITY_UNIT)
-    : 0;
+  // Process licenses are environment-specific: calculate per env where peak > 40k
+  const processLicensesPerEnv: Record<string, number> = {};
+  for (const [env, envPeak] of Object.entries(usage.envPeakRequests)) {
+    if (envPeak > PREMIUM_CAPACITY) {
+      processLicensesPerEnv[env] = Math.ceil(envPeak / PROCESS_CAPACITY_UNIT);
+    }
+  }
+  const totalProcessLicensesRequired = Object.values(processLicensesPerEnv).reduce((s, v) => s + v, 0);
+  // Each environment needs its own process license — no cross-env credit
+  const incrementalProcessLicensesNeeded = totalProcessLicensesRequired;
 
   // Premium required: 8k < peak ≤ 40k AND entitled < 40k
   const additionalPremiumRequired =
@@ -242,7 +275,7 @@ function classifyUser(usage: UserUsage, fileType: FileType): ClassifiedUser {
       ? 1 : 0;
 
   const effectiveObservedCapacity = Math.max(STANDARD_CAPACITY, usage.maxEntitledQuantity);
-  const compliant = peakDailyRequests <= effectiveObservedCapacity;
+  const compliant = peakDailyRequests <= effectiveObservedCapacity && totalProcessLicensesRequired === 0;
   const capacityGapRequests = Math.max(peakDailyRequests - effectiveObservedCapacity, 0);
 
   let recommendation: 'Process' | 'Premium' | 'Covered';
@@ -287,6 +320,7 @@ function classifyUser(usage: UserUsage, fileType: FileType): ClassifiedUser {
 
   return {
     callerId: usage.callerId,
+    callerType: usage.callerType,
     environmentCount: usage.environments.length,
     environments: usage.environments.sort().join('; '),
     totalRequests: usage.totalRequests,
@@ -301,6 +335,7 @@ function classifyUser(usage: UserUsage, fileType: FileType): ClassifiedUser {
     additionalPremiumRequired,
     totalProcessLicensesRequired,
     incrementalProcessLicensesNeeded,
+    processLicensesPerEnv,
     daysOverStandard,
     daysOverPremium,
     daysUnderPremium: 0,  // not used for per-user

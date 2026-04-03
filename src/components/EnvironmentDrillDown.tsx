@@ -73,7 +73,7 @@ function EnvTrendChart({ env, isPerFlow }: { env: EnvironmentSummary; isPerFlow:
           <circle key={i} cx={scaleX(i)} cy={scaleY(d.requests)} r={3}
             fill={dotFill}
             stroke="var(--panel)" strokeWidth={1}>
-            <title>{d.date}: {d.requests.toLocaleString()} requests ({d.usersActive} {isPerFlow ? 'flows' : 'users'})</title>
+            <title>{d.date}: {d.requests.toLocaleString()} requests ({d.usersActive} {isPerFlow ? 'flows' : 'callers/users'})</title>
           </circle>
         );
       })}
@@ -119,7 +119,7 @@ export default function EnvironmentDrillDown({ env, onClose, fileType }: Environ
         <div className="dd-stats">
           <div className="dd-stat">
             <span className="dd-stat-val">{env.totalUsers}</span>
-            <span className="dd-stat-lbl">Total {isPerFlow ? 'Flows' : 'Users'}</span>
+            <span className="dd-stat-lbl">Total {isPerFlow ? 'Flows' : fileType === 'non-licensed' ? 'Callers' : 'Users'}</span>
           </div>
           <div className="dd-stat">
             <span className="dd-stat-val" style={{ color: 'var(--green)' }}>{env.usersCompliant}</span>
@@ -173,7 +173,7 @@ export default function EnvironmentDrillDown({ env, onClose, fileType }: Environ
                 <tr>
                   <th>Date</th>
                   <th className="num">Total Requests</th>
-                  <th className="num">Active {isPerFlow ? 'Flows' : 'Users'}</th>
+                  <th className="num">Active {isPerFlow ? 'Flows' : fileType === 'non-licensed' ? 'Callers' : 'Users'}</th>
                   <th>Status</th>
                 </tr>
               </thead>

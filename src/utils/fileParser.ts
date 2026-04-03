@@ -7,6 +7,7 @@ export interface ParseResult {
   totalRowCount: number;
   parseIssues: string[];
   fileType: FileType;
+  tenantEntitlement?: number;   // non-licensed files only: tenant-wide pool (e.g. 500 000)
 }
 
 /**
@@ -39,7 +40,16 @@ async function parseCSV(
   const lines = text.split(/\r?\n/);
   if (lines.length < 2) throw new Error('File is empty or has no data rows.');
 
-  const header = parseCSVLine(lines[0]);
+  // Detect optional preamble line (e.g. "Power platform request entitlement for this tenant: 500000")
+  let tenantEntitlement: number | undefined;
+  let headerLineIdx = 0;
+  const preambleMatch = lines[0].match(/power platform request entitlement.*?:\s*(\d+)/i);
+  if (preambleMatch) {
+    tenantEntitlement = parseInt(preambleMatch[1], 10);
+    headerLineIdx = 1;
+  }
+
+  const header = parseCSVLine(lines[headerLineIdx]);
   const fileType = detectFileType(header);
   validateColumns(header, fileType);
 
@@ -48,7 +58,7 @@ async function parseCSV(
   const issues: string[] = [];
   const total = lines.length;
 
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = headerLineIdx + 1; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
 
@@ -69,9 +79,10 @@ async function parseCSV(
   return {
     rows,
     dateRange: extractDateRange(file.name),
-    totalRowCount: lines.length - 1,
+    totalRowCount: lines.length - 1 - headerLineIdx,
     parseIssues: issues,
     fileType,
+    tenantEntitlement,
   };
 }
 
@@ -128,11 +139,12 @@ interface ColIdx {
   powerAutomateRequests: number; // maps to "Consumed Quantity" for per-flow
 }
 
-/** Detect whether the file is a per-user or per-flow export based on its columns */
+/** Detect whether the file is a per-user, per-flow, or non-licensed export based on its columns */
 function detectFileType(header: string[]): FileType {
   const has = (name: string) => header.some(h => h.trim().toLowerCase() === name.toLowerCase());
-  // "Consumed Quantity" is the definitive per-flow column; "Caller Type" alone isn't enough
-  // since some per-user exports also include it
+  // 'Resource Type' is unique to the non-licensed / service-principal export
+  if (has('Resource Type')) return 'non-licensed';
+  // 'Consumed Quantity' (without Resource Type) is the per-flow export
   if (has('Consumed Quantity')) return 'per-flow';
   return 'per-user';
 }
@@ -156,6 +168,18 @@ function buildColumnIndex(header: string[], fileType: FileType): ColIdx {
     };
   }
 
+  if (fileType === 'non-licensed') {
+    return {
+      environmentId: find('Environment ID'),
+      environmentName: find('Environment Name'),
+      callerId: find('Caller ID'),
+      callerType: find('Caller Type', true),
+      usageDatetime: find('Usage Datetime'),
+      entitledQuantity: -1,   // no individual entitlement for non-licensed callers
+      powerAutomateRequests: find('Consumed Quantity'),
+    };
+  }
+
   return {
     environmentId: find('Environment ID'),
     environmentName: find('Environment Name'),
@@ -168,9 +192,14 @@ function buildColumnIndex(header: string[], fileType: FileType): ColIdx {
 }
 
 function validateColumns(header: string[], fileType: FileType): void {
-  const required = fileType === 'per-flow'
-    ? ['Environment ID', 'Environment Name', 'Caller ID', 'Usage Datetime', 'Entitled Quantity', 'Consumed Quantity']
-    : ['Environment ID', 'Environment Name', 'Caller ID', 'Usage Datetime', 'Entitled Quantity', 'Power Automate Requests'];
+  let required: string[];
+  if (fileType === 'per-flow') {
+    required = ['Environment ID', 'Environment Name', 'Caller ID', 'Usage Datetime', 'Entitled Quantity', 'Consumed Quantity'];
+  } else if (fileType === 'non-licensed') {
+    required = ['Environment ID', 'Environment Name', 'Caller ID', 'Caller Type', 'Usage Datetime', 'Consumed Quantity'];
+  } else {
+    required = ['Environment ID', 'Environment Name', 'Caller ID', 'Usage Datetime', 'Entitled Quantity', 'Power Automate Requests'];
+  }
 
   const missing = required.filter(
     col => !header.some(h => h.trim().toLowerCase() === col.toLowerCase())
@@ -185,7 +214,9 @@ function buildRow(cells: string[], idx: ColIdx, _rowNum: number, fileType: FileT
   if (!callerId) return null;
 
   const usageDate = parseDate(cells[idx.usageDatetime]?.trim());
-  const entitledQuantity = parseInt(cells[idx.entitledQuantity]?.trim() || '0', 10);
+  const entitledQuantity = idx.entitledQuantity >= 0
+    ? parseInt(cells[idx.entitledQuantity]?.trim() || '0', 10)
+    : 0;   // non-licensed: no individual entitlement
   const powerAutomateRequests = parseInt(cells[idx.powerAutomateRequests]?.trim() || '0', 10);
 
   if (isNaN(entitledQuantity) || isNaN(powerAutomateRequests)) {
@@ -203,6 +234,9 @@ function buildRow(cells: string[], idx: ColIdx, _rowNum: number, fileType: FileT
 
   if (fileType === 'per-flow' && idx.callerType >= 0) {
     row.callerType = cells[idx.callerType]?.trim() || 'Flow';
+  }
+  if (fileType === 'non-licensed' && idx.callerType >= 0) {
+    row.callerType = cells[idx.callerType]?.trim() || 'Unknown';
   }
 
   return row;
