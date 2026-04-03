@@ -294,10 +294,9 @@ export default function DaysView({ analysis: nl, rawRows, addonPrice, processPri
                   const isAboveCap = day.requests > D365_POOL_CAP;
                   const isPeak = day.date === nl.peakTenantDay;
 
-                  // Unified status color — matches the Status badge exactly
+                  // Unified color for data cells (% of pool, overrun) — green if within pool
                   const rowStatusColor = isAboveCap ? 'var(--red)'
                     : isOverDay ? '#c18e00'
-                    : pct > 0.8 ? 'var(--amber)'
                     : 'var(--green)';
 
                   // Add-on cost: only for overrun between pool and 10M cap
