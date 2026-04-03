@@ -208,6 +208,19 @@ function App() {
 
           <div className="sidebar-divider" />
 
+          {loadedFiles.length >= 2 && (
+            <div
+              className={`sidebar-item ${activeView === 'combined' ? 'active' : ''}`}
+              title="Combined License Overview"
+              onClick={() => setActiveView('combined')}
+            >
+              {/* Merge/combine icon */}
+              <svg viewBox="0 0 20 20" width="22" height="22" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path fillRule="evenodd" d="M9.664 1.319a.75.75 0 0 1 .672 0l9.168 4.584a.75.75 0 0 1 0 1.338L10.336 11.82a.75.75 0 0 1-.672 0L.5 7.241a.75.75 0 0 1 0-1.338L9.664 1.32ZM10 3.145 3.163 6.568 10 9.993l6.837-3.425L10 3.145ZM.5 12.75l9.164 4.582a.75.75 0 0 0 .672 0L19.5 12.75a.75.75 0 0 0 0-1.338l-1.696-.848-7.14 3.57a1.5 1.5 0 0 1-1.328 0l-7.14-3.57-1.696.848a.75.75 0 0 0 0 1.338Z" clipRule="evenodd"/>
+              </svg>
+            </div>
+          )}
+
           <div
             className={`sidebar-item ${activeView === 'users' && loadedFiles.length > 0 ? 'active' : ''}`}
             title={fileType === 'per-flow' ? 'Flow Overview' : 'User Overview'}
@@ -237,19 +250,6 @@ function App() {
               {/* Calendar icon */}
               <svg viewBox="0 0 20 20" width="22" height="22" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                 <path fillRule="evenodd" d="M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25v-8.5A2.75 2.75 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z" clipRule="evenodd"/>
-              </svg>
-            </div>
-          )}
-
-          {loadedFiles.length >= 2 && (
-            <div
-              className={`sidebar-item ${activeView === 'combined' ? 'active' : ''}`}
-              title="Combined License Overview"
-              onClick={() => setActiveView('combined')}
-            >
-              {/* Merge/combine icon */}
-              <svg viewBox="0 0 20 20" width="22" height="22" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                <path fillRule="evenodd" d="M9.664 1.319a.75.75 0 0 1 .672 0l9.168 4.584a.75.75 0 0 1 0 1.338L10.336 11.82a.75.75 0 0 1-.672 0L.5 7.241a.75.75 0 0 1 0-1.338L9.664 1.32ZM10 3.145 3.163 6.568 10 9.993l6.837-3.425L10 3.145ZM.5 12.75l9.164 4.582a.75.75 0 0 0 .672 0L19.5 12.75a.75.75 0 0 0 0-1.338l-1.696-.848-7.14 3.57a1.5 1.5 0 0 1-1.328 0l-7.14-3.57-1.696.848a.75.75 0 0 0 0 1.338Z" clipRule="evenodd"/>
               </svg>
             </div>
           )}
@@ -305,6 +305,12 @@ function App() {
           {loadedFiles.length > 0 && (
             <div className="header-actions">
               <div className="view-tabs">
+                {loadedFiles.length >= 2 && (
+                  <button
+                    className={`view-tab ${activeView === 'combined' ? 'active' : ''} view-tab-combined`}
+                    onClick={() => setActiveView('combined')}
+                  >🔗 Combined</button>
+                )}
                 <button
                   className={`view-tab ${activeView === 'users' ? 'active' : ''}`}
                   onClick={() => setActiveView('users')}
@@ -318,12 +324,6 @@ function App() {
                     className={`view-tab ${activeView === 'days' ? 'active' : ''}`}
                     onClick={() => setActiveView('days')}
                   >📅 Days</button>
-                )}
-                {loadedFiles.length >= 2 && (
-                  <button
-                    className={`view-tab ${activeView === 'combined' ? 'active' : ''} view-tab-combined`}
-                    onClick={() => setActiveView('combined')}
-                  >🔗 Combined</button>
                 )}
               </div>
               <button className="btn-secondary" onClick={() => setShowSettings(true)}>⚙️ Prices</button>
