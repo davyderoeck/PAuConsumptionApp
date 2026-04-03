@@ -109,29 +109,76 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
           </button>
         </div>
         <div className="summary-kpis">
-          <div className="kpi-pill">
-            <span className="kpi-val">{s.usersAnalyzed.toLocaleString()}</span>
-            <span className="kpi-lbl">{entityLabel}</span>
-          </div>
-          <div className="kpi-pill kpi-green">
-            <span className="kpi-val">{complianceRate}%</span>
-            <span className="kpi-lbl">Compliant</span>
-          </div>
-          <div className="kpi-pill kpi-amber">
-            <span className="kpi-val">{isPerFlow
-              ? users.filter(u => u.recommendation === 'Downgrade to Premium').length
-              : s.usersMissingPremium
-            }</span>
-            <span className="kpi-lbl">{isPerFlow ? 'Can Downgrade' : 'Need Premium'}</span>
-          </div>
-          <div className="kpi-pill kpi-red">
-            <span className="kpi-val">{s.usersNeedingProcessLicenses}</span>
-            <span className="kpi-lbl">Need Process</span>
-          </div>
-          <div className="kpi-pill kpi-accent">
-            <span className="kpi-val">{fmtCur(liveAnnualOpp)}</span>
-            <span className="kpi-lbl">Annual Opp.</span>
-          </div>
+          {fileType === 'non-licensed' && nl ? (
+            /* ── Non-licensed: show pool-level KPIs instead of per-user compliance ── */
+            <>
+              <div className="kpi-pill">
+                <span className="kpi-val">{s.usersAnalyzed.toLocaleString()}</span>
+                <span className="kpi-lbl">Callers</span>
+              </div>
+              <div className={`kpi-pill ${nl.overrun > 0 ? 'kpi-red' : 'kpi-green'}`}>
+                <span className="kpi-val">{fmtNum(nl.peakTenantRequests)}</span>
+                <span className="kpi-lbl">Peak req/day</span>
+              </div>
+              <div className={`kpi-pill ${nl.overrun > 0 ? 'kpi-red' : 'kpi-green'}`}>
+                <span className="kpi-val">{nl.overrun > 0 ? `+${fmtNum(nl.overrun)}` : '✓ 0'}</span>
+                <span className="kpi-lbl">Daily overrun</span>
+              </div>
+              {nl.overrun > 0 && (
+                <div className="kpi-pill kpi-amber">
+                  <span className="kpi-val">{fmtCur(nl.addonCostMonthly > 0 ? nl.addonCostMonthly : 0)}/mo</span>
+                  <span className="kpi-lbl">Add-on cost{nl.addonsCapped ? ' (max)' : ''}</span>
+                </div>
+              )}
+              {nl.addonsCapped && (
+                <div className="kpi-pill kpi-red">
+                  <span className="kpi-val">{nl.processLicensesNeeded}</span>
+                  <span className="kpi-lbl">Process lic. needed</span>
+                </div>
+              )}
+              {nl.addonsCapped && (
+                <div className="kpi-pill kpi-red">
+                  <span className="kpi-val">
+                    {nl.processLicenseCostMonthly > 0 ? `${fmtCur(nl.processLicenseCostMonthly)}/mo` : 'Set price ⚙️'}
+                  </span>
+                  <span className="kpi-lbl">Process lic. cost</span>
+                </div>
+              )}
+              {(nl.addonCostMonthly > 0 || nl.processLicenseCostMonthly > 0) && (
+                <div className="kpi-pill kpi-accent">
+                  <span className="kpi-val">{fmtCur((nl.addonCostMonthly + nl.processLicenseCostMonthly) * 12)}/yr</span>
+                  <span className="kpi-lbl">Total annual cost</span>
+                </div>
+              )}
+            </>
+          ) : (
+            /* ── Per-user / per-flow: compliance KPIs ── */
+            <>
+              <div className="kpi-pill">
+                <span className="kpi-val">{s.usersAnalyzed.toLocaleString()}</span>
+                <span className="kpi-lbl">{entityLabel}</span>
+              </div>
+              <div className="kpi-pill kpi-green">
+                <span className="kpi-val">{complianceRate}%</span>
+                <span className="kpi-lbl">Compliant</span>
+              </div>
+              <div className="kpi-pill kpi-amber">
+                <span className="kpi-val">{isPerFlow
+                  ? users.filter(u => u.recommendation === 'Downgrade to Premium').length
+                  : s.usersMissingPremium
+                }</span>
+                <span className="kpi-lbl">{isPerFlow ? 'Can Downgrade' : 'Need Premium'}</span>
+              </div>
+              <div className="kpi-pill kpi-red">
+                <span className="kpi-val">{s.usersNeedingProcessLicenses}</span>
+                <span className="kpi-lbl">Need Process</span>
+              </div>
+              <div className="kpi-pill kpi-accent">
+                <span className="kpi-val">{fmtCur(liveAnnualOpp)}</span>
+                <span className="kpi-lbl">Annual Opp.</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
