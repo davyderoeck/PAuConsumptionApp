@@ -1,0 +1,23 @@
+﻿LINKEDIN POST DRAFT
+
+I have had quite a few customer conversations around Power Platform and Power Automate licensing, and one thing I keep seeing is that this is not always easy to interpret in practice.
+
+The documentation is there, but when you need to explain whether Premium is enough, whether Process is required, or where the actual licensing issue sits, it can still take time to work through the data.
+
+To help with that, I built a small Power Apps Code App that analyzes Power Platform Admin Center exports and highlights:
+- who is compliant
+- where Premium might be enough
+- where Process licensing is recommended
+- how usage looks over time and per environment
+
+I also wanted to spend some time trying out the new Code Apps experience with a practical example. This ended up being a nice use case, and I was able to build the first version in just a couple of hours.
+
+I have now published it back to the community as both source code and a managed solution:
+https://github.com/davyderoeck/PAuConsumptionApp
+
+I am genuinely interested in feedback.
+Is this something you were missing?
+Would this be useful in your own tenant or in customer conversations?
+What would you want to improve first?
+
+#PowerPlatform #PowerAutomate #Licensing #CodeApps #OpenSource

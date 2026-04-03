@@ -1,0 +1,20 @@
+﻿LINKEDIN POST DRAFT - SHORT VERSION
+
+Power Platform / Power Automate licensing is one of those topics that looks clear on paper, but is not always easy to explain in practice.
+
+After a number of customer conversations on this topic, I built a small Power Apps Code App to help analyze PPAC exports and show:
+- who is compliant
+- where Premium is enough
+- where Process is recommended
+- how usage is split over time and by environment
+
+I also used this as a practical way to try the new Code Apps experience, and I was able to build the first version in a couple of hours.
+
+I have now published it as source code + managed solution:
+https://github.com/davyderoeck/PAuConsumptionApp
+
+Curious what the community thinks.
+Would this be useful for you or your customers?
+What would you want to see added?
+
+#PowerPlatform #PowerAutomate #Licensing #CodeApps #OpenSource

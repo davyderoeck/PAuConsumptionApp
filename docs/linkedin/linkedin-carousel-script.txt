@@ -1,0 +1,81 @@
+﻿LINKEDIN CAROUSEL SCRIPT
+Power Automate Consumption Analyzer
+
+Format
+- LinkedIn document post
+- Export as PDF
+- 5 slides
+- Keep each slide visually clean: one title, 2-4 short bullets, one screenshot where relevant
+
+Slide 1 - Problem
+Title:
+Power Automate licensing is not always easy to understand
+
+Body:
+- I have had many customer conversations around Power Platform and Power Automate licensing.
+- The rules exist, but applying them in practice is not always straightforward.
+- Especially when you need to explain when Premium is enough and when Process is really needed.
+
+Footer:
+I built a small tool to help make that easier.
+
+Visual:
+- No screenshot required, or use a blurred/cropped product image as background if preferred.
+
+Slide 2 - Upload and start
+Title:
+Start with your PPAC export
+
+Body:
+- Upload CSV or Excel exports from the Power Platform Admin Center.
+- Supports Licensed User, Non-Licensed User, and Per Flow reports.
+- Drag and drop the file and start the analysis.
+
+Visual:
+- Use: docs/screenshots/main screen 1.jpeg
+
+Slide 3 - User overview matrix
+Title:
+See who is compliant and what is recommended
+
+Body:
+- The overview matrix shows who is covered and who is not.
+- It highlights whether Premium is enough or whether Process licensing is recommended.
+- The matrix also acts as a filter for the detailed list below.
+
+Visual:
+- Use: docs/screenshots/User Details 1.jpg
+
+Slide 4 - Drill into a specific user
+Title:
+Go deeper with usage over time and by environment
+
+Body:
+- Open a user to see trends over time and detailed environment usage.
+- This matters because Process licensing cannot cover multiple environments.
+- The detailed breakdown helps identify where the actual issue sits.
+
+Visual:
+- Use: docs/screenshots/User Details 2.jpg
+
+Slide 5 - Environment view, pricing, and CTA
+Title:
+Review by environment and adapt the pricing model
+
+Body:
+- Switch to environment-level analysis to understand where risk is concentrated.
+- Adjust Premium and Process prices to estimate impact in your own context.
+- I published this as source code and managed solution.
+
+CTA:
+Would this be useful for you or your customers? What would you add?
+
+Visual:
+- Main image: docs/screenshots/Environment Details 1.jpg
+- Optional inset/secondary image: docs/screenshots/Settings.jpg
+
+Design notes
+- Use large headings and minimal text.
+- Do not put long paragraphs on slides.
+- Keep consistent branding/colors across all slides.
+- Add the GitHub repo URL on the final slide only.
