@@ -86,7 +86,6 @@ export default function DaysView({ analysis: nl, rawRows, addonPrice, processPri
 
   const statusColor = (pct: number) => {
     if (pct > 1.0) return 'var(--red)';
-    if (pct > 0.8) return 'var(--amber)';
     return 'var(--green)';
   };
   const coverageColor = (c: DayEnv['coverage']) =>
