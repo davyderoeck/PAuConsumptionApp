@@ -59,9 +59,10 @@ export default function UsersTable({ users, onSelectUser, patternFilter, fileTyp
   const recBadge = (u: ClassifiedUser) => {
     // Non-licensed: pool coverage status drives the badge
     if (isNonLicensed) {
-      if (u.poolCoverageStatus === 'overrun')  return <span className="badge badge-non-compliant">⚠️ Pool overrun</span>;
-      if (u.poolCoverageStatus === 'warning')  return <span className="badge badge-warning">⚠️ Near limit</span>;
-      return <span className="badge badge-covered">Covered</span>;
+      if (u.poolCoverageStatus === 'cap')     return <span className="badge badge-non-compliant">🔴 PROCESS NEEDED</span>;
+      if (u.poolCoverageStatus === 'warning') return <span className="badge badge-warning">🟡 ADD-ON ZONE</span>;
+      if (u.poolCoverageStatus === 'overrun') return <span className="badge badge-warning">🟡 ADD-ON ZONE</span>;
+      return <span className="badge badge-covered">✅ COVERED</span>;
     }
     if (u.recommendation === 'Downgrade to Premium') return <span className="badge badge-downgrade">⬇ Downgrade</span>;
     if (!u.compliant && u.recommendation === 'Covered') return <span className="badge badge-warning">Non-Compliant</span>;
@@ -142,7 +143,8 @@ export default function UsersTable({ users, onSelectUser, patternFilter, fileTyp
                 key={u.callerId + i}
                 className={`clickable-row ${
                   isNonLicensed
-                    ? u.poolCoverageStatus === 'overrun'  ? 'row-non-compliant'
+                    ? u.poolCoverageStatus === 'cap'      ? 'row-non-compliant'
+                      : u.poolCoverageStatus === 'overrun'  ? 'row-warning'
                       : u.poolCoverageStatus === 'warning' ? 'row-warning'
                       : ''
                     : u.recommendation === 'Process'            ? 'row-non-compliant'

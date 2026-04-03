@@ -42,15 +42,22 @@ export function analyzeConsumption(
     .map(u => classifyUser(u, fileType));
 
   // For non-licensed: allocate pool bottom-up (smallest callers covered first).
-  // A caller is 'covered' while cumulative peak ≤ pool, 'warning' up to 110%, 'overrun' above.
+  // Zones based on cumulative peak vs pool entitlement and 10M platform cap:
+  //   'covered' : cumulative ≤ tenantPool             → fully within entitled pool
+  //   'warning' : tenantPool < cumulative ≤ D365_POOL_CAP → add-on zone (fixable with PPR add-ons)
+  //   'overrun' : tenantPool < cum ... still ≤ D365_POOL_CAP (alias kept for compat) ← unused now
+  //   'cap'     : cumulative > D365_POOL_CAP           → above 10M, needs Process license
   if (fileType === 'non-licensed' && tenantPool && tenantPool > 0) {
     const asc = [...classified].sort((a, b) => a.peakDailyRequests - b.peakDailyRequests);
     let cumulative = 0;
-    const statusMap = new Map<string, 'covered' | 'warning' | 'overrun'>();
+    const statusMap = new Map<string, 'covered' | 'warning' | 'overrun' | 'cap'>();
     for (const u of asc) {
       cumulative += u.peakDailyRequests;
-      const pct = cumulative / tenantPool;
-      statusMap.set(u.callerId, pct <= 1.0 ? 'covered' : pct <= 1.1 ? 'warning' : 'overrun');
+      const status: 'covered' | 'warning' | 'cap' =
+        cumulative <= tenantPool   ? 'covered'
+        : cumulative <= D365_POOL_CAP ? 'warning'
+        : 'cap';
+      statusMap.set(u.callerId, status);
     }
     classified = classified.map(u => {
       const poolCoverageStatus = statusMap.get(u.callerId) ?? 'covered';
@@ -59,10 +66,10 @@ export function analyzeConsumption(
         ...u,
         poolCoverageStatus,
         compliant: false,
-        frequencyLabel: poolCoverageStatus === 'warning' ? 'Monitor first' : 'License recommended',
+        frequencyLabel: poolCoverageStatus === 'warning'   ? 'Monitor first' : 'License recommended',
         frequencyInsight: poolCoverageStatus === 'warning'
-          ? `Cumulative pool usage enters 100–110% range — borderline overrun`
-          : `Caller pushes tenant pool above 110% — tenant-level remediation needed`,
+          ? `Caller pushes tenant pool into add-on zone (above entitlement, below 10M cap)`
+          : `Caller pushes tenant pool above 10M platform cap — Process license required`,
       };
     });
   }

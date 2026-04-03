@@ -57,7 +57,7 @@ export interface ClassifiedUser {
   frequencyInsight: string;   // human-readable frequency recommendation (full)
   frequencyLabel: string;     // short conclusion label for table column
   /** Non-licensed only: position in bottom-up pool allocation */
-  poolCoverageStatus?: 'covered' | 'warning' | 'overrun';
+  poolCoverageStatus?: 'covered' | 'warning' | 'overrun' | 'cap';
 }
 
 /** Seller-focused summary for the dashboard */
