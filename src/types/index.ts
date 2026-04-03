@@ -157,3 +157,16 @@ export interface NonLicensedTenantAnalysis {
 
 export type ProcessingStatus = 'idle' | 'parsing' | 'analyzing' | 'complete' | 'error';
 
+/** A fully processed file slot — one per file type, loaded simultaneously */
+export interface LoadedFile {
+  id: string;                    // equals fileType — one slot per type
+  fileName: string;
+  fileType: FileType;
+  rows: RawApiRow[];
+  users: ClassifiedUser[];
+  summary: SellerSummary;
+  environments: EnvironmentSummary[];
+  tenantEntitlement?: number;
+  nonLicensedAnalysis?: NonLicensedTenantAnalysis | null;
+}
+

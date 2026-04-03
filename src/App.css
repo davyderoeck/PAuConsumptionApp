@@ -1811,3 +1811,136 @@ tbody td {
   color: var(--amber) !important;
   font-size: 0.92em;
 }
+
+/* ── File Tray ───────────────────────────────────────────── */
+.file-tray {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+}
+
+.file-tray-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 5px 10px;
+  font-size: 0.82em;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  max-width: 300px;
+}
+.file-chip:hover { border-color: var(--accent); color: var(--text); }
+.file-chip.active { border-color: var(--accent); color: var(--text); background: var(--accent-dim); }
+
+.file-chip-type { font-weight: 600; white-space: nowrap; }
+.file-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+  opacity: 0.75;
+}
+
+.file-chip-remove {
+  margin-left: 2px;
+  opacity: 0.45;
+  font-size: 0.88em;
+  padding: 0 3px;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+.file-chip-remove:hover { opacity: 1; color: var(--red); }
+
+.file-chip-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 0.82em;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.file-chip-add:hover { border-color: var(--accent); color: var(--accent); }
+
+.btn-ghost-danger {
+  flex-shrink: 0;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.82em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.btn-ghost-danger:hover { color: var(--red); border-color: var(--red); }
+
+/* ── Add File Modal ──────────────────────────────────────── */
+.add-file-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-file-modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: min(620px, 92vw);
+  padding: 20px 24px 24px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+
+.add-file-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.add-file-modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.1em;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.add-file-modal-close:hover { color: var(--text); }
+
+.add-file-progress { padding: 4px 0 12px; }
+
+/* Compact upload zone (no info panel) */
+.file-upload-compact .file-upload-section { margin-bottom: 0; }
+.file-upload-compact .drop-zone { padding: 36px 24px; }

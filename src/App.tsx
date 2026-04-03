@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import './App.css'
-import type { ClassifiedUser, EnvironmentSummary, FileType, NonLicensedTenantAnalysis, ProcessingStatus, RawApiRow, SellerSummary, TenantPoolConfig, UserDrillDownData } from './types'
+import type { ClassifiedUser, EnvironmentSummary, FileType, LoadedFile, ProcessingStatus, TenantPoolConfig, UserDrillDownData } from './types'
 import { DEFAULT_PREMIUM_PRICE_MONTHLY, DEFAULT_PROCESS_PRICE_MONTHLY } from './types'
 import { parseFile } from './utils/fileParser'
 import { analyzeConsumption, buildDrillDown, buildEnvironmentSummary, analyzeNonLicensedTenant } from './utils/complianceAnalyzer'
@@ -22,10 +22,9 @@ function App() {
   const [progress, setProgress] = useState(0)
   const [progressLabel, setProgressLabel] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [summary, setSummary] = useState<SellerSummary | null>(null)
-  const [users, setUsers] = useState<ClassifiedUser[]>([])
-  const [rawRows, setRawRows] = useState<RawApiRow[]>([])
-  const [environments, setEnvironments] = useState<EnvironmentSummary[]>([])
+  const [loadedFiles, setLoadedFiles] = useState<LoadedFile[]>([])
+  const [activeFileId, setActiveFileId] = useState<string | null>(null)
+  const [addingFileMode, setAddingFileMode] = useState(false)
   const [drillDown, setDrillDown] = useState<UserDrillDownData | null>(null)
   const [envDrillDown, setEnvDrillDown] = useState<EnvironmentSummary | null>(null)
   const [activeView, setActiveView] = useState<ActiveView>('users')
@@ -34,17 +33,26 @@ function App() {
   const [processPrice, setProcessPrice] = useState(DEFAULT_PROCESS_PRICE_MONTHLY)
   const [currency, setCurrency] = useState('USD')
   const [patternFilter, setPatternFilter] = useState<string[]>([])
-  const [fileType, setFileType] = useState<FileType>('per-user')
-  const [tenantEntitlement, setTenantEntitlement] = useState<number | undefined>(undefined)
   const [tenantPoolConfig, setTenantPoolConfig] = useState<TenantPoolConfig>({ requestAddonPrice: 55 })
-  const [nonLicensedAnalysis, setNonLicensedAnalysis] = useState<NonLicensedTenantAnalysis | null>(null)
+
+  // Derived from the active loaded file
+  const activeFile = loadedFiles.find(f => f.id === activeFileId) ?? loadedFiles[0] ?? null
+  const rawRows = activeFile?.rows ?? []
+  const users = activeFile?.users ?? []
+  const summary = activeFile?.summary ?? null
+  const environments = activeFile?.environments ?? []
+  const fileType: FileType = activeFile?.fileType ?? 'per-user'
+  const tenantEntitlement = activeFile?.tenantEntitlement
+  const nonLicensedAnalysis = activeFile?.nonLicensedAnalysis ?? null
+
+  const fileTypeLabel = (ft: FileType): string => {
+    if (ft === 'per-user') return '👥 Licensed Users'
+    if (ft === 'per-flow') return '⚡ Per-Flow'
+    return '👤 Non-Licensed'
+  }
 
   const handleFileSelected = useCallback(async (file: File) => {
     setError(null)
-    setSummary(null)
-    setUsers([])
-    setRawRows([])
-    setEnvironments([])
     setProgress(0)
 
     try {
@@ -60,9 +68,6 @@ function App() {
       if (parseResult.rows.length === 0) {
         throw new Error('No valid data rows found. Check that the file has the required columns.')
       }
-
-      setFileType(parseResult.fileType)
-      setTenantEntitlement(parseResult.tenantEntitlement)
 
       setStatus('analyzing')
       setProgressLabel('Analyzing consumption...')
@@ -85,34 +90,66 @@ function App() {
         ? analyzeNonLicensedTenant(parseResult.rows, tenantPoolConfig, parseResult.tenantEntitlement, processPrice)
         : null
 
+      const loaded: LoadedFile = {
+        id: parseResult.fileType,   // one slot per type
+        fileName: file.name,
+        fileType: parseResult.fileType,
+        rows: parseResult.rows,
+        users: analyzedUsers,
+        summary: analyzedSummary,
+        environments: envSummaries,
+        tenantEntitlement: parseResult.tenantEntitlement,
+        nonLicensedAnalysis: nlAnalysis,
+      }
+
+      setLoadedFiles(prev => {
+        const exists = prev.some(f => f.id === parseResult.fileType)
+        return exists ? prev.map(f => f.id === parseResult.fileType ? loaded : f) : [...prev, loaded]
+      })
+      setActiveFileId(parseResult.fileType)
+      setAddingFileMode(false)
       setProgress(100)
       setProgressLabel('Complete!')
-      setRawRows(parseResult.rows)
-      setUsers(analyzedUsers)
-      setSummary(analyzedSummary)
-      setEnvironments(envSummaries)
-      setNonLicensedAnalysis(nlAnalysis)
       setStatus('complete')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred')
       setStatus('error')
     }
-  }, [premiumPrice, processPrice])
+  }, [premiumPrice, processPrice, tenantPoolConfig])
 
   const handleRestart = useCallback(() => {
     setStatus('idle')
     setProgress(0)
     setProgressLabel('')
     setError(null)
-    setSummary(null)
-    setUsers([])
-    setRawRows([])
-    setEnvironments([])
+    setLoadedFiles([])
+    setActiveFileId(null)
+    setAddingFileMode(false)
     setDrillDown(null)
     setEnvDrillDown(null)
     setActiveView('users')
-    setTenantEntitlement(undefined)
-    setNonLicensedAnalysis(null)
+  }, [])
+
+  const handleRemoveFile = useCallback((fileTypeId: string) => {
+    setLoadedFiles(prev => {
+      const remaining = prev.filter(f => f.id !== fileTypeId)
+      if (activeFileId === fileTypeId || activeFileId === null) {
+        const next = remaining[0] ?? null
+        setActiveFileId(next?.id ?? null)
+        setActiveView('users')
+        setDrillDown(null)
+        setEnvDrillDown(null)
+        if (remaining.length === 0) setStatus('idle')
+      }
+      return remaining
+    })
+  }, [activeFileId])
+
+  const handleSwitchFile = useCallback((fileTypeId: string) => {
+    setActiveFileId(fileTypeId)
+    setActiveView('users')
+    setDrillDown(null)
+    setEnvDrillDown(null)
   }, [])
 
   const handleDownload = useCallback(() => {
@@ -171,9 +208,9 @@ function App() {
           <div className="sidebar-divider" />
 
           <div
-            className={`sidebar-item ${activeView === 'users' && status === 'complete' ? 'active' : ''}`}
+            className={`sidebar-item ${activeView === 'users' && loadedFiles.length > 0 ? 'active' : ''}`}
             title={fileType === 'per-flow' ? 'Flow Overview' : 'User Overview'}
-            onClick={() => status === 'complete' && setActiveView('users')}
+            onClick={() => loadedFiles.length > 0 && setActiveView('users')}
           >
             {/* People / Users icon */}
             <svg viewBox="0 0 20 20" width="22" height="22" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -181,16 +218,16 @@ function App() {
             </svg>
           </div>
           <div
-            className={`sidebar-item ${activeView === 'environments' && status === 'complete' ? 'active' : ''}`}
+            className={`sidebar-item ${activeView === 'environments' && loadedFiles.length > 0 ? 'active' : ''}`}
             title="Environment Overview"
-            onClick={() => status === 'complete' && setActiveView('environments')}
+            onClick={() => loadedFiles.length > 0 && setActiveView('environments')}
           >
             {/* Server / Environment icon */}
             <svg viewBox="0 0 20 20" width="22" height="22" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
               <path fillRule="evenodd" d="M2 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5Zm14 1a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM2 13a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2Zm14 1a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z" clipRule="evenodd"/>
             </svg>
           </div>
-          {fileType === 'non-licensed' && status === 'complete' && (
+          {fileType === 'non-licensed' && loadedFiles.length > 0 && (
             <div
               className={`sidebar-item ${activeView === 'days' ? 'active' : ''}`}
               title="Daily Consumption (non-licensed)"
@@ -251,7 +288,7 @@ function App() {
             </h1>
             <p className="subtitle">Identify licensing opportunities from Power Platform API request exports</p>
           </div>
-          {status === 'complete' && (
+          {loadedFiles.length > 0 && (
             <div className="header-actions">
               <div className="view-tabs">
                 <button
@@ -280,11 +317,44 @@ function App() {
             <HelpPage onClose={() => setActiveView('users')} />
           )}
 
-          {activeView !== 'help' && (status === 'idle' || status === 'error') && (
+          {/* File tray — chip per loaded file */}
+          {activeView !== 'help' && loadedFiles.length > 0 && (
+            <div className="file-tray">
+              <div className="file-tray-chips">
+                {loadedFiles.map(f => (
+                  <button
+                    key={f.id}
+                    className={`file-chip file-chip-${f.fileType} ${(activeFileId === f.id || (!activeFileId && loadedFiles[0] === f)) ? 'active' : ''}`}
+                    onClick={() => handleSwitchFile(f.id)}
+                  >
+                    <span className="file-chip-type">{fileTypeLabel(f.fileType)}</span>
+                    <span className="file-chip-name" title={f.fileName}>{f.fileName}</span>
+                    <span
+                      className="file-chip-remove"
+                      title={`Remove ${f.fileName}`}
+                      onClick={(e) => { e.stopPropagation(); handleRemoveFile(f.id); }}
+                    >✕</span>
+                  </button>
+                ))}
+                {loadedFiles.length < 3 && !addingFileMode && (
+                  <button className="file-chip-add" onClick={() => { setError(null); setAddingFileMode(true); }}>
+                    + Add file
+                  </button>
+                )}
+              </div>
+              <button className="btn-ghost-danger" onClick={handleRestart} title="Clear all loaded files">
+                🗑 Clear all
+              </button>
+            </div>
+          )}
+
+          {/* Full upload zone — only when no files loaded yet */}
+          {activeView !== 'help' && loadedFiles.length === 0 && !addingFileMode && (status === 'idle' || status === 'error') && (
             <FileUpload onFileSelected={handleFileSelected} status={status} />
           )}
 
-          {activeView !== 'help' && isProcessing && (
+          {/* Full-screen progress — only for first upload */}
+          {activeView !== 'help' && isProcessing && loadedFiles.length === 0 && (
             <div className="progress-section">
               <p className="progress-label">{progressLabel}</p>
               <div className="progress-bar-track">
@@ -294,13 +364,13 @@ function App() {
             </div>
           )}
 
-          {activeView !== 'help' && error && (
+          {activeView !== 'help' && error && !addingFileMode && (
             <div className="error-banner">
               <strong>Error:</strong> {error}
             </div>
           )}
 
-          {activeView !== 'help' && summary && status === 'complete' && (
+          {activeView !== 'help' && summary && loadedFiles.length > 0 && (
             <>
               <SummaryDashboard summary={summary} users={users} patternFilter={patternFilter} onSelectPattern={(p, multi) => { setPatternFilter(prev => { if (multi) { return prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]; } else { return prev.length === 1 && prev[0] === p ? [] : [p]; } }); setActiveView('users'); }} fileType={fileType} premiumPrice={premiumPrice} processPrice={processPrice} addonPrice={tenantPoolConfig.requestAddonPrice} currency={currency} tenantEntitlement={tenantEntitlement} nonLicensedAnalysis={nonLicensedAnalysis} />
 
@@ -316,6 +386,36 @@ function App() {
                 <DaysView analysis={nonLicensedAnalysis} rawRows={rawRows} addonPrice={tenantPoolConfig.requestAddonPrice} processPrice={processPrice} />
               )}
             </>
+          )}
+
+          {/* Add-file modal */}
+          {addingFileMode && (
+            <div className="add-file-overlay" onClick={() => !isProcessing && setAddingFileMode(false)}>
+              <div className="add-file-modal" onClick={e => e.stopPropagation()}>
+                <div className="add-file-modal-header">
+                  <span>Add another file</span>
+                  {!isProcessing && (
+                    <button className="add-file-modal-close" onClick={() => { setAddingFileMode(false); setError(null); }}>✕</button>
+                  )}
+                </div>
+                {isProcessing ? (
+                  <div className="progress-section add-file-progress">
+                    <p className="progress-label">{progressLabel}</p>
+                    <div className="progress-bar-track">
+                      <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
+                    </div>
+                    <p className="progress-pct">{progress}%</p>
+                  </div>
+                ) : (
+                  <FileUpload onFileSelected={handleFileSelected} status={status} compact />
+                )}
+                {error && (
+                  <div className="error-banner" style={{ margin: '12px 0 0' }}>
+                    <strong>Error:</strong> {error}
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </main>
 
@@ -352,10 +452,11 @@ function App() {
           onCurrency={setCurrency}
           onTenantPoolConfig={(cfg) => {
             setTenantPoolConfig(cfg)
-            // Re-run tenant analysis immediately when config changes
-            if (fileType === 'non-licensed' && rawRows.length > 0) {
-              setNonLicensedAnalysis(analyzeNonLicensedTenant(rawRows, cfg, tenantEntitlement, processPrice))
-            }
+            // Re-run tenant analysis for all loaded non-licensed files
+            setLoadedFiles(prev => prev.map(f => {
+              if (f.fileType !== 'non-licensed' || f.rows.length === 0) return f
+              return { ...f, nonLicensedAnalysis: analyzeNonLicensedTenant(f.rows, cfg, f.tenantEntitlement, processPrice) }
+            }))
           }}
           onClose={() => setShowSettings(false)}
         />

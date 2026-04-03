@@ -4,6 +4,7 @@ import type { ProcessingStatus } from '../types';
 interface FileUploadProps {
   onFileSelected: (file: File) => void;
   status: ProcessingStatus;
+  compact?: boolean;
 }
 
 const ACCEPTED_TYPES = [
@@ -15,7 +16,7 @@ const ACCEPTED_TYPES = [
   'text/csv',
 ];
 
-export default function FileUpload({ onFileSelected, status }: FileUploadProps) {
+export default function FileUpload({ onFileSelected, status, compact }: FileUploadProps) {
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -54,7 +55,7 @@ export default function FileUpload({ onFileSelected, status }: FileUploadProps) 
   const isProcessing = status !== 'idle' && status !== 'complete' && status !== 'error';
 
   return (
-    <div className="file-upload-section">
+    <div className={`file-upload-section${compact ? ' file-upload-compact' : ''}`}>
       <div
         className={`drop-zone ${dragActive ? 'drag-active' : ''} ${isProcessing ? 'processing' : ''}`}
         onDragEnter={handleDrag}
@@ -93,7 +94,7 @@ export default function FileUpload({ onFileSelected, status }: FileUploadProps) 
         )}
       </div>
 
-      <div className="upload-info-panel">
+      {!compact && <div className="upload-info-panel">
         <h2 className="upload-info-heading">📊 Power Platform Request Consumption Analyzer</h2>
         <p className="upload-info-text">
           Analyze your Power Platform request consumption data. Upload a CSV file exported from the <strong>Power Platform Admin Center (PPAC)</strong>.
@@ -139,7 +140,7 @@ export default function FileUpload({ onFileSelected, status }: FileUploadProps) 
             </p>
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
