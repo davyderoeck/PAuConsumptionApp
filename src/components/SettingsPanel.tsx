@@ -111,6 +111,20 @@ export default function SettingsPanel({
             {procError && <span className="settings-error-msg">Enter a valid price (e.g. 150,00)</span>}
           </div>
 
+          <div className="settings-field">
+            <label>PP Request capacity add-on (per add-on/mo)</label>
+            <p className="settings-hint" style={{ marginBottom: 4 }}>
+              Each add-on gives +50,000 req/day to the shared non-licensed tenant pool.
+            </p>
+            <div className="settings-input-wrap">
+              <span className="settings-currency">{sym}</span>
+              <input type="text" inputMode="decimal" value={addonText}
+                onChange={e => handleAddonChange(e.target.value)} onBlur={handleAddonBlur}
+                className={`settings-input ${addonError ? 'settings-input-error' : ''}`} placeholder="55,00" />
+            </div>
+            {addonError && <span className="settings-error-msg">Enter a valid price</span>}
+          </div>
+
           {fileType === 'non-licensed' && (
             <>
               <div className="settings-divider" />
@@ -119,19 +133,6 @@ export default function SettingsPanel({
                 The tenant pool size is read from the CSV file. The platform hard-caps the non-licensed pool at <strong>10,000,000 req/day</strong> — add-ons can fill up to that ceiling only.
                 Consumption above 10M must use <strong>Power Automate Process licenses</strong> (set the Process price above to estimate that cost).
               </p>
-              <div className="settings-field">
-                <label>PP Request capacity add-on (per add-on/mo)</label>
-                <p className="settings-hint" style={{ marginBottom: 4 }}>
-                  Each add-on gives +50,000 req/day to the shared tenant pool.
-                </p>
-                <div className="settings-input-wrap">
-                  <span className="settings-currency">{sym}</span>
-                  <input type="text" inputMode="decimal" value={addonText}
-                    onChange={e => handleAddonChange(e.target.value)} onBlur={handleAddonBlur}
-                    className={`settings-input ${addonError ? 'settings-input-error' : ''}`} placeholder="0,00" />
-                </div>
-                {addonError && <span className="settings-error-msg">Enter a valid price</span>}
-              </div>
             </>
           )}
 
