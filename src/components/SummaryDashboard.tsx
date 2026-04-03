@@ -1,4 +1,5 @@
-import type { ClassifiedUser, FileType, SellerSummary } from '../types';
+import type { ClassifiedUser, FileType, NonLicensedTenantAnalysis, SellerSummary } from '../types';
+import { REQUEST_ADDON_CAPACITY } from '../types';
 import { exportSummaryOverview } from '../utils/reportGenerator';
 
 interface SummaryDashboardProps {
@@ -11,6 +12,7 @@ interface SummaryDashboardProps {
   processPrice: number;
   currency: string;
   tenantEntitlement?: number;
+  nonLicensedAnalysis?: NonLicensedTenantAnalysis | null;
 }
 
 type PatternKey = 'License recommended' | 'Moderate pattern' | 'Occasional spike' | 'Monitor first' | 'Compliant' | 'Downgrade candidate';
@@ -33,7 +35,7 @@ const PATTERN_CLASS: Record<PatternKey, string> = {
   'Compliant':           'pat-ok',
 };
 
-export default function SummaryDashboard({ summary: s, users, patternFilter, onSelectPattern, fileType, premiumPrice, processPrice, currency, tenantEntitlement }: SummaryDashboardProps) {
+export default function SummaryDashboard({ summary: s, users, patternFilter, onSelectPattern, fileType, premiumPrice, processPrice, currency, tenantEntitlement, nonLicensedAnalysis }: SummaryDashboardProps) {
   const isPerFlow = fileType === 'per-flow';
   const entityLabel = isPerFlow ? 'Flows' : fileType === 'non-licensed' ? 'Callers' : 'Users';
   const complianceRate = s.usersAnalyzed > 0
@@ -43,6 +45,9 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
   const pPrem = premiumPrice;
   const pProc = processPrice;
   const fmtCur = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const fmtNum = (n: number) => n.toLocaleString();
+
+  const nl = nonLicensedAnalysis;
 
   // Build per-pattern breakdown
   const byPattern: Record<PatternKey, ClassifiedUser[]> = {
@@ -118,6 +123,181 @@ export default function SummaryDashboard({ summary: s, users, patternFilter, onS
           </div>
         </div>
       </div>
+
+      {/* ── Non-licensed tenant pool analysis ── */}
+      {fileType === 'non-licensed' && nl && (
+        <div className="breakdown-section" style={{ marginTop: 16 }}>
+          <h3>🏢 Tenant Pool Analysis</h3>
+
+          {/* KPI row */}
+          <div className="summary-kpis" style={{ flexWrap: 'wrap', marginBottom: 12 }}>
+            <div className="kpi-pill">
+              <span className="kpi-val">{fmtNum(nl.tenantPool)}</span>
+              <span className="kpi-lbl">Pool / day</span>
+            </div>
+            <div className={`kpi-pill ${nl.peakTenantRequests > nl.tenantPool ? 'kpi-red' : 'kpi-green'}`}>
+              <span className="kpi-val">{fmtNum(nl.peakTenantRequests)}</span>
+              <span className="kpi-lbl">Peak Day</span>
+            </div>
+            <div className={`kpi-pill ${nl.overrun > 0 ? 'kpi-red' : 'kpi-green'}`}>
+              <span className="kpi-val">{nl.overrun > 0 ? `+${fmtNum(nl.overrun)}` : '✓ 0'}</span>
+              <span className="kpi-lbl">Daily Overrun</span>
+            </div>
+            {nl.overrun > 0 && (
+              <div className="kpi-pill kpi-amber">
+                <span className="kpi-val">{nl.addonsNeeded}</span>
+                <span className="kpi-lbl">Add-ons needed</span>
+              </div>
+            )}
+            {nl.overrun > 0 && nl.addonCostMonthly > 0 && (
+              <div className="kpi-pill kpi-accent">
+                <span className="kpi-val">{fmtCur(nl.addonCostMonthly)}/mo</span>
+                <span className="kpi-lbl">Add-on cost</span>
+              </div>
+            )}
+          </div>
+
+          {/* Pool utilisation bar */}
+          {nl.tenantPool > 0 && (
+            <div style={{ margin: '0 0 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78em', color: 'var(--text-muted)', marginBottom: 3 }}>
+                <span>Peak day utilisation  —  {nl.peakTenantDay}</span>
+                <span>{Math.round((nl.peakTenantRequests / nl.tenantPool) * 100)}% of pool</span>
+              </div>
+              <div style={{ height: 10, borderRadius: 5, background: 'var(--border)', overflow: 'visible', position: 'relative' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${Math.min((nl.peakTenantRequests / Math.max(nl.peakTenantRequests, nl.tenantPool)) * 100, 100)}%`,
+                  background: nl.overrun > 0 ? 'var(--red)' : nl.peakTenantRequests / nl.tenantPool > 0.8 ? 'var(--amber)' : 'var(--green)',
+                  borderRadius: 5,
+                }} />
+                {/* Pool cap marker */}
+                {nl.overrun === 0 && (
+                  <div style={{
+                    position: 'absolute', top: -3, bottom: -3,
+                    left: `${(nl.tenantPool / Math.max(nl.peakTenantRequests, nl.tenantPool)) * 100}%`,
+                    width: 2, background: 'var(--text-muted)', borderRadius: 1,
+                  }} />
+                )}
+              </div>
+              {nl.overrun > 0 && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 4, fontSize: '0.75em', color: 'var(--red)' }}>
+                  <span>▲ Overrun: +{fmtNum(nl.overrun)} req/day above pool cap ({fmtNum(nl.tenantPool)})</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Overrun remediation options ── */}
+          {nl.overrun > 0 && (
+            <>
+              <h4 style={{ margin: '4px 0 10px', fontSize: '0.85em', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Remediation Options
+              </h4>
+              <div className="breakdown-scroll">
+                <table className="breakdown-table">
+                  <thead>
+                    <tr>
+                      <th>Option</th>
+                      <th className="num">Units</th>
+                      <th className="num">Capacity</th>
+                      <th className="num">Monthly cost</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>A — PP Request Add-ons</strong></td>
+                      <td className="num">{nl.addonsNeeded}</td>
+                      <td className="num">+{fmtNum(nl.addonsNeeded * REQUEST_ADDON_CAPACITY)} req/day</td>
+                      <td className="num">
+                        {nl.addonCostMonthly > 0
+                          ? <strong>{fmtCur(nl.addonCostMonthly)}</strong>
+                          : <em style={{ color: 'var(--text-muted)' }}>Set price in ⚙️</em>}
+                      </td>
+                      <td style={{ fontSize: '0.82em', color: 'var(--text-muted)' }}>
+                        Expands shared tenant pool; benefits all non-licensed callers
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><strong>B — Process Licenses</strong> (top callers)</td>
+                      <td className="num">varies</td>
+                      <td className="num">250k req/day each</td>
+                      <td className="num"><em style={{ color: 'var(--text-muted)' }}>See below</em></td>
+                      <td style={{ fontSize: '0.82em', color: 'var(--text-muted)' }}>
+                        Removes flow from shared pool; environment-specific; best for high-volume SPs
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {/* ── Top callers table ── */}
+          {nl.topCallers.length > 0 && (
+            <>
+              <h4 style={{ margin: '14px 0 6px', fontSize: '0.85em', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Top Callers {nl.overrun > 0 ? '— Process License Candidates' : ''}
+              </h4>
+              <div className="breakdown-scroll">
+                <table className="breakdown-table">
+                  <thead>
+                    <tr>
+                      <th>Caller ID</th>
+                      <th>Type</th>
+                      <th className="num">Peak Daily</th>
+                      <th className="num">Total Requests</th>
+                      <th className="num">% of Pool</th>
+                      {nl.overrun > 0 && <th className="num">Process Lic.</th>}
+                      {nl.overrun > 0 && pProc > 0 && <th className="num">Cost/mo</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {nl.topCallers.map(c => {
+                      const licNeeded = Math.ceil(c.peakDailyRequests / 250_000);
+                      const cost = licNeeded * pProc;
+                      return (
+                        <tr key={c.callerId}>
+                          <td className="caller-cell" title={c.callerId}>{c.callerId}</td>
+                          <td style={{ fontSize: '0.82em', color: 'var(--text-muted)' }}>{c.callerType ?? '—'}</td>
+                          <td className="num">{fmtNum(c.peakDailyRequests)}</td>
+                          <td className="num">{fmtNum(c.totalRequests)}</td>
+                          <td className="num">
+                            {nl.tenantPool > 0
+                              ? `${((c.peakDailyRequests / nl.tenantPool) * 100).toFixed(1)}%`
+                              : '—'}
+                          </td>
+                          {nl.overrun > 0 && <td className="num">{licNeeded}</td>}
+                          {nl.overrun > 0 && pProc > 0 && <td className="num">{cost > 0 ? fmtCur(cost) : '—'}</td>}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {nl.overrun > 0 && (
+                <p className="settings-hint" style={{ marginTop: 6 }}>
+                  ⚠️ Process licenses are <strong>environment-specific</strong>. A flow calling across multiple environments needs one license per environment.
+                  The table above shows peak usage across all environments; open the Callers view for per-environment detail.
+                </p>
+              )}
+            </>
+          )}
+
+          {/* Edge cases */}
+          {nl.overrun === 0 && nl.tenantPool > 0 && (
+            <p style={{ color: 'var(--green)', fontSize: '0.9em', marginTop: 4 }}>
+              ✅ Peak usage ({fmtNum(nl.peakTenantRequests)} req/day) is within the {fmtNum(nl.tenantPool)} req/day tenant pool. No remediation needed.
+            </p>
+          )}
+          {nl.tenantPool === 0 && (
+            <p style={{ color: 'var(--amber)', fontSize: '0.9em', marginTop: 4 }}>
+              ⚠️ Tenant pool entitlement not found in the CSV preamble. Overrun analysis unavailable.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Compliance × Frequency breakdown table */}
       <div className="breakdown-section">

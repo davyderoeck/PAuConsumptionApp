@@ -6,6 +6,8 @@ import type {
   UserDrillDownData,
   EnvironmentSummary,
   FileType,
+  TenantPoolConfig,
+  NonLicensedTenantAnalysis,
 } from '../types';
 import {
   STANDARD_CAPACITY,
@@ -13,6 +15,7 @@ import {
   PROCESS_CAPACITY_UNIT,
   DEFAULT_PREMIUM_PRICE_MONTHLY,
   DEFAULT_PROCESS_PRICE_MONTHLY,
+  REQUEST_ADDON_CAPACITY,
 } from '../types';
 
 const fmt = (n: number) => n >= 1_000_000
@@ -464,5 +467,81 @@ export function buildEnvironmentSummary(rows: RawApiRow[], fileType: FileType = 
   return summaries.sort((a, b) =>
     (b.usersNeedingProcess + b.usersMissingPremium) - (a.usersNeedingProcess + a.usersMissingPremium)
   );
+}
+
+/**
+ * Tenant-level analysis for non-licensed callers.
+ *
+ * Non-licensed identities (service principals, app users, non-interactive users)
+ * consume from a shared tenant pool read directly from the CSV preamble.
+ *
+ * Overrun remediation options:
+ *   1. PP Request capacity add-on: +50,000 req/day per add-on (expands the pool)
+ *   2. Process license (env-specific): removes a specific flow from the shared pool
+ *      by giving it its own 250,000 req/day bucket
+ */
+export function analyzeNonLicensedTenant(
+  rows: RawApiRow[],
+  config: TenantPoolConfig,
+  csvEntitlement?: number,
+): NonLicensedTenantAnalysis {
+  const tenantPool = csvEntitlement ?? 0;
+
+  // --- Aggregate total daily consumption across ALL callers ---
+  const dateMap = new Map<string, number>();
+  for (const row of rows) {
+    dateMap.set(row.usageDate, (dateMap.get(row.usageDate) ?? 0) + row.powerAutomateRequests);
+  }
+
+  const dailyTotals = Array.from(dateMap.entries())
+    .map(([date, requests]) => ({ date, requests }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const emptyDay = { date: '', requests: 0 };
+  const peak = dailyTotals.reduce((best, d) => d.requests > best.requests ? d : best, emptyDay);
+
+  const overrun = tenantPool > 0 ? Math.max(0, peak.requests - tenantPool) : 0;
+  const addonsNeeded = overrun > 0 ? Math.ceil(overrun / REQUEST_ADDON_CAPACITY) : 0;
+  const addonCostMonthly = addonsNeeded * config.requestAddonPrice;
+
+  // --- Top callers by peak daily usage (Process license candidates) ---
+  const callerMap = new Map<string, {
+    callerId: string; callerType?: string;
+    totalRequests: number; peakDailyRequests: number;
+  }>();
+  const callerDailyTotals = new Map<string, Map<string, number>>();
+
+  for (const row of rows) {
+    if (!callerMap.has(row.callerId)) {
+      callerMap.set(row.callerId, {
+        callerId: row.callerId,
+        callerType: row.callerType,
+        totalRequests: 0,
+        peakDailyRequests: 0,
+      });
+      callerDailyTotals.set(row.callerId, new Map());
+    }
+    const c = callerMap.get(row.callerId)!;
+    c.totalRequests += row.powerAutomateRequests;
+
+    const dm = callerDailyTotals.get(row.callerId)!;
+    dm.set(row.usageDate, (dm.get(row.usageDate) ?? 0) + row.powerAutomateRequests);
+    c.peakDailyRequests = Math.max(c.peakDailyRequests, dm.get(row.usageDate)!);
+  }
+
+  const topCallers = Array.from(callerMap.values())
+    .sort((a, b) => b.peakDailyRequests - a.peakDailyRequests)
+    .slice(0, 10);
+
+  return {
+    tenantPool,
+    peakTenantDay: peak.date,
+    peakTenantRequests: peak.requests,
+    dailyTotals,
+    overrun,
+    addonsNeeded,
+    addonCostMonthly,
+    topCallers,
+  };
 }
 
