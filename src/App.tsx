@@ -14,8 +14,9 @@ import EnvironmentDrillDown from './components/EnvironmentDrillDown'
 import SettingsPanel from './components/SettingsPanel'
 import HelpPage from './components/HelpPage'
 import DaysView from './components/DaysView'
+import CombinedSummary from './components/CombinedSummary'
 
-type ActiveView = 'users' | 'environments' | 'days' | 'help'
+type ActiveView = 'users' | 'environments' | 'days' | 'combined' | 'help'
 
 function App() {
   const [status, setStatus] = useState<ProcessingStatus>('idle')
@@ -240,6 +241,19 @@ function App() {
             </div>
           )}
 
+          {loadedFiles.length >= 2 && (
+            <div
+              className={`sidebar-item ${activeView === 'combined' ? 'active' : ''}`}
+              title="Combined License Overview"
+              onClick={() => setActiveView('combined')}
+            >
+              {/* Merge/combine icon */}
+              <svg viewBox="0 0 20 20" width="22" height="22" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path fillRule="evenodd" d="M9.664 1.319a.75.75 0 0 1 .672 0l9.168 4.584a.75.75 0 0 1 0 1.338L10.336 11.82a.75.75 0 0 1-.672 0L.5 7.241a.75.75 0 0 1 0-1.338L9.664 1.32ZM10 3.145 3.163 6.568 10 9.993l6.837-3.425L10 3.145ZM.5 12.75l9.164 4.582a.75.75 0 0 0 .672 0L19.5 12.75a.75.75 0 0 0 0-1.338l-1.696-.848-7.14 3.57a1.5 1.5 0 0 1-1.328 0l-7.14-3.57-1.696.848a.75.75 0 0 0 0 1.338Z" clipRule="evenodd"/>
+              </svg>
+            </div>
+          )}
+
           <div className="sidebar-divider" />
 
           <div
@@ -304,6 +318,12 @@ function App() {
                     className={`view-tab ${activeView === 'days' ? 'active' : ''}`}
                     onClick={() => setActiveView('days')}
                   >📅 Days</button>
+                )}
+                {loadedFiles.length >= 2 && (
+                  <button
+                    className={`view-tab ${activeView === 'combined' ? 'active' : ''} view-tab-combined`}
+                    onClick={() => setActiveView('combined')}
+                  >🔗 Combined</button>
                 )}
               </div>
               <button className="btn-secondary" onClick={() => setShowSettings(true)}>⚙️ Prices</button>
@@ -370,7 +390,17 @@ function App() {
             </div>
           )}
 
-          {activeView !== 'help' && summary && loadedFiles.length > 0 && (
+          {activeView === 'combined' && loadedFiles.length >= 2 && (
+            <CombinedSummary
+              loadedFiles={loadedFiles}
+              premiumPrice={premiumPrice}
+              processPrice={processPrice}
+              addonPrice={tenantPoolConfig.requestAddonPrice}
+              currency={currency}
+            />
+          )}
+
+          {activeView !== 'help' && activeView !== 'combined' && summary && loadedFiles.length > 0 && (
             <>
               <SummaryDashboard summary={summary} users={users} patternFilter={patternFilter} onSelectPattern={(p, multi) => { setPatternFilter(prev => { if (multi) { return prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]; } else { return prev.length === 1 && prev[0] === p ? [] : [p]; } }); setActiveView('users'); }} fileType={fileType} premiumPrice={premiumPrice} processPrice={processPrice} addonPrice={tenantPoolConfig.requestAddonPrice} currency={currency} tenantEntitlement={tenantEntitlement} nonLicensedAnalysis={nonLicensedAnalysis} />
 
