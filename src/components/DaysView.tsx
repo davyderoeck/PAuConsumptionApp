@@ -1,9 +1,10 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import type { NonLicensedTenantAnalysis, RawApiRow } from '../types';
 
 interface DaysViewProps {
   analysis: NonLicensedTenantAnalysis;
   rawRows: RawApiRow[];
+  addonPrice: number;   // $/month per add-on (from settings)
 }
 
 interface DayEnvCaller {
@@ -17,10 +18,11 @@ interface DayEnv {
   envName: string;
   totalRequests: number;
   callers: DayEnvCaller[];
+  /** pool coverage determined by bottom-up cumulative allocation */
+  coverage: 'covered' | 'warning' | 'overrun';
 }
 
-function buildDayDetail(rows: RawApiRow[], date: string): DayEnv[] {
-  // Group by env then caller for the given date
+function buildDayDetail(rows: RawApiRow[], date: string, tenantPool: number): DayEnv[] {
   const envMap = new Map<string, { envName: string; callers: Map<string, { callerType: string; requests: number }> }>();
   for (const r of rows) {
     if (r.usageDate !== date) continue;
@@ -36,7 +38,9 @@ function buildDayDetail(rows: RawApiRow[], date: string): DayEnv[] {
       envEntry.callers.set(key, { callerType: r.callerType ?? 'System', requests: r.powerAutomateRequests });
     }
   }
-  return Array.from(envMap.entries())
+
+  // Sort envs by total desc, then assign coverage bottom-up (smallest first)
+  const envList = Array.from(envMap.entries())
     .map(([envId, { envName, callers }]) => ({
       envId,
       envName,
@@ -46,146 +50,179 @@ function buildDayDetail(rows: RawApiRow[], date: string): DayEnv[] {
         .sort((a, b) => b.requests - a.requests),
     }))
     .sort((a, b) => b.totalRequests - a.totalRequests);
+
+  // Bottom-up allocation (smallest first)
+  const asc = [...envList].sort((a, b) => a.totalRequests - b.totalRequests);
+  let cumulative = 0;
+  const coverageMap = new Map<string, DayEnv['coverage']>();
+  for (const e of asc) {
+    cumulative += e.totalRequests;
+    const pct = tenantPool > 0 ? cumulative / tenantPool : 0;
+    coverageMap.set(e.envId, pct <= 1.0 ? 'covered' : pct <= 1.1 ? 'warning' : 'overrun');
+  }
+
+  return envList.map(e => ({ ...e, coverage: coverageMap.get(e.envId) ?? 'covered' }));
 }
 
-export default function DaysView({ analysis: nl, rawRows }: DaysViewProps) {
+export default function DaysView({ analysis: nl, rawRows, addonPrice }: DaysViewProps) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [expandedEnvs, setExpandedEnvs] = useState<Set<string>>(new Set());
+  const [expandedEnvId, setExpandedEnvId] = useState<string | null>(null);
 
   const fmtNum = (n: number) => n.toLocaleString();
-  const fmtPct = (n: number) => `${(n * 100).toFixed(1)}%`;
+  const fmtPct = (n: number, d = 1) => `${(n * 100).toFixed(d)}%`;
+  const fmtCur = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
   const sortedDays = [...nl.dailyTotals].sort((a, b) => a.date.localeCompare(b.date));
-  const maxDay = Math.max(...sortedDays.map(d => d.requests));
+  const maxDay = Math.max(...sortedDays.map(d => d.requests), 1);
+  const dateList = sortedDays.map(d => d.date);
 
-  const statusColor = (requests: number) => {
-    if (nl.tenantPool === 0) return 'var(--text-muted)';
-    const pct = requests / nl.tenantPool;
+  const selectedIdx = selectedDate ? dateList.indexOf(selectedDate) : -1;
+  const prevDate = selectedIdx > 0 ? dateList[selectedIdx - 1] : null;
+  const nextDate = selectedIdx >= 0 && selectedIdx < dateList.length - 1 ? dateList[selectedIdx + 1] : null;
+
+  const navigate = (date: string) => { setSelectedDate(date); setExpandedEnvId(null); };
+
+  const statusColor = (pct: number) => {
     if (pct > 1.0) return 'var(--red)';
     if (pct > 0.8) return 'var(--amber)';
     return 'var(--green)';
   };
-  const statusClass = (requests: number) => {
-    if (nl.tenantPool === 0) return '';
-    const pct = requests / nl.tenantPool;
-    if (pct > 1.0) return 'row-non-compliant';
-    if (pct > 0.8) return 'row-warning';
-    return '';
-  };
+  const coverageColor = (c: DayEnv['coverage']) =>
+    c === 'overrun' ? 'var(--red)' : c === 'warning' ? 'var(--amber)' : 'var(--green)';
 
-  const dayDetail = selectedDate ? buildDayDetail(rawRows, selectedDate) : [];
+  const statusClass = (pct: number) =>
+    pct > 1.0 ? 'row-non-compliant' : pct > 0.8 ? 'row-warning' : '';
+
+  const dayDetail = selectedDate ? buildDayDetail(rawRows, selectedDate, nl.tenantPool) : [];
   const dayTotal = selectedDate ? (nl.dailyTotals.find(d => d.date === selectedDate)?.requests ?? 0) : 0;
+  const dayPct = nl.tenantPool > 0 ? dayTotal / nl.tenantPool : 0;
+  const dayOverrun = Math.max(0, dayTotal - nl.tenantPool);
 
-  const toggleEnv = (envId: string) => {
-    setExpandedEnvs(prev => {
-      const next = new Set(prev);
-      if (next.has(envId)) next.delete(envId); else next.add(envId);
-      return next;
-    });
-  };
+  // PPR opportunity for this day's overrun
+  const REQUEST_ADDON_CAPACITY = 50_000;
+  const dayAddonsNeeded = dayOverrun > 0 ? Math.ceil(dayOverrun / REQUEST_ADDON_CAPACITY) : 0;
+  const dayAddonCost = addonPrice > 0 ? dayAddonsNeeded * addonPrice : null;
 
   return (
     <div className="days-view">
       {selectedDate ? (
         /* ── Day drill-down ── */
         <div>
-          <div className="dd-header" style={{ marginBottom: 16 }}>
-            <button className="dd-back" onClick={() => { setSelectedDate(null); setExpandedEnvs(new Set()); }}>
-              ← Back to Days
+          {/* Navigation header */}
+          <div className="days-nav-bar">
+            <button className="days-nav-btn days-back-btn" onClick={() => { setSelectedDate(null); setExpandedEnvId(null); }}>
+              ← All Days
             </button>
-            <h2 style={{ margin: 0 }}>📅 {selectedDate}</h2>
-            <div className="dd-stats" style={{ marginTop: 8, gap: 16, flexWrap: 'wrap' }}>
-              <div className="dd-stat">
-                <span className="dd-stat-val" style={{ color: statusColor(dayTotal) }}>{fmtNum(dayTotal)}</span>
-                <span className="dd-stat-lbl">Total req this day</span>
+            <div className="days-nav-center">
+              <button className="days-nav-arrow" onClick={() => prevDate && navigate(prevDate)} disabled={!prevDate} title={prevDate ? `← ${prevDate}` : 'No previous day'}>
+                ‹
+              </button>
+              <h2 className="days-nav-date">📅 {selectedDate}</h2>
+              <button className="days-nav-arrow" onClick={() => nextDate && navigate(nextDate)} disabled={!nextDate} title={nextDate ? `${nextDate} →` : 'No next day'}>
+                ›
+              </button>
+            </div>
+            <div className="days-nav-spacer" />
+          </div>
+
+          {/* Day KPI bar */}
+          <div className="days-day-kpis">
+            <div className="days-day-kpi">
+              <span className="days-day-kpi-val" style={{ color: statusColor(dayPct) }}>{fmtNum(dayTotal)}</span>
+              <span className="days-day-kpi-lbl">Total req this day</span>
+            </div>
+            {nl.tenantPool > 0 && (
+              <div className="days-day-kpi">
+                <span className="days-day-kpi-val" style={{ color: statusColor(dayPct) }}>{fmtPct(dayPct)}</span>
+                <span className="days-day-kpi-lbl">% of pool ({fmtNum(nl.tenantPool)})</span>
               </div>
-              {nl.tenantPool > 0 && (
-                <div className="dd-stat">
-                  <span className="dd-stat-val" style={{ color: statusColor(dayTotal) }}>
-                    {fmtPct(dayTotal / nl.tenantPool)}
-                  </span>
-                  <span className="dd-stat-lbl">% of pool ({fmtNum(nl.tenantPool)})</span>
-                </div>
-              )}
-              {dayTotal > nl.tenantPool && nl.tenantPool > 0 && (
-                <div className="dd-stat">
-                  <span className="dd-stat-val" style={{ color: 'var(--red)' }}>+{fmtNum(dayTotal - nl.tenantPool)}</span>
-                  <span className="dd-stat-lbl">Overrun</span>
-                </div>
-              )}
-              <div className="dd-stat">
-                <span className="dd-stat-val">{dayDetail.length}</span>
-                <span className="dd-stat-lbl">Environments</span>
+            )}
+            {dayOverrun > 0 && (
+              <div className="days-day-kpi">
+                <span className="days-day-kpi-val" style={{ color: 'var(--red)' }}>+{fmtNum(dayOverrun)}</span>
+                <span className="days-day-kpi-lbl">Overrun</span>
               </div>
-              <div className="dd-stat">
-                <span className="dd-stat-val">{dayDetail.reduce((s, e) => s + e.callers.length, 0)}</span>
-                <span className="dd-stat-lbl">Callers</span>
+            )}
+            {dayOverrun > 0 && (
+              <div className="days-day-kpi">
+                <span className="days-day-kpi-val" style={{ color: 'var(--amber)' }}>{dayAddonsNeeded}</span>
+                <span className="days-day-kpi-lbl">Add-ons needed</span>
               </div>
+            )}
+            {dayOverrun > 0 && dayAddonCost !== null && (
+              <div className="days-day-kpi">
+                <span className="days-day-kpi-val" style={{ color: 'var(--accent)' }}>{fmtCur(dayAddonCost)}/mo</span>
+                <span className="days-day-kpi-lbl">PPR add-on cost</span>
+              </div>
+            )}
+            <div className="days-day-kpi">
+              <span className="days-day-kpi-val">{dayDetail.length}</span>
+              <span className="days-day-kpi-lbl">Environments</span>
+            </div>
+            <div className="days-day-kpi">
+              <span className="days-day-kpi-val">{dayDetail.reduce((s, e) => s + e.callers.length, 0)}</span>
+              <span className="days-day-kpi-lbl">Callers</span>
             </div>
           </div>
 
-          {/* Per-environment accordion */}
-          {dayDetail.map(env => {
-            const isOpen = expandedEnvs.has(env.envId);
-            const envPct = nl.tenantPool > 0 ? env.totalRequests / nl.tenantPool : 0;
-            return (
-              <div key={env.envId} className="days-env-card">
+          {/* Environment tiles grid */}
+          <div className="days-env-tiles">
+            {dayDetail.map(env => {
+              const envPct = nl.tenantPool > 0 ? env.totalRequests / nl.tenantPool : 0;
+              const barW = Math.min((env.totalRequests / Math.max(dayTotal, 1)) * 100, 100);
+              const isOpen = expandedEnvId === env.envId;
+              const clr = coverageColor(env.coverage);
+              return (
                 <div
-                  className="days-env-header"
-                  onClick={() => toggleEnv(env.envId)}
-                  style={{ cursor: 'pointer' }}
+                  key={env.envId}
+                  className={`days-env-tile ${isOpen ? 'days-env-tile-open' : ''}`}
+                  onClick={() => setExpandedEnvId(isOpen ? null : env.envId)}
                 >
-                  <span className="days-env-toggle">{isOpen ? '▾' : '▸'}</span>
-                  <span className="days-env-name" title={env.envId}>{env.envName}</span>
-                  <span className="days-env-callers">{env.callers.length} caller{env.callers.length !== 1 ? 's' : ''}</span>
-                  <div className="days-env-bar-wrap">
-                    <div className="days-env-bar-track">
-                      <div
-                        className="days-env-bar-fill"
-                        style={{
-                          width: `${Math.min((env.totalRequests / Math.max(dayTotal, 1)) * 100, 100)}%`,
-                          background: statusColor(dayTotal > 0 ? (env.totalRequests / dayTotal) * nl.tenantPool || env.totalRequests : env.totalRequests),
-                        }}
-                      />
-                    </div>
+                  <div className="days-env-tile-header">
+                    <div className="days-env-tile-status-dot" style={{ background: clr }} />
+                    <span className="days-env-tile-name" title={env.envId}>{env.envName}</span>
                   </div>
-                  <span className="days-env-total" style={{ color: 'var(--text-muted)', minWidth: 100, textAlign: 'right' }}>
+                  <div className="days-env-tile-val" style={{ color: clr }}>
                     {fmtNum(env.totalRequests)}
-                    {nl.tenantPool > 0 && (
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8em', marginLeft: 6 }}>
-                        ({fmtPct(envPct)})
-                      </span>
-                    )}
-                  </span>
-                </div>
-
-                {isOpen && (
-                  <div className="breakdown-scroll" style={{ marginTop: 6 }}>
-                    <table className="breakdown-table">
-                      <thead>
-                        <tr>
-                          <th>Caller ID</th>
-                          <th>Type</th>
-                          <th className="num">Requests</th>
-                          <th className="num">% of Day Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {env.callers.map(c => (
-                          <tr key={c.callerId}>
-                            <td className="caller-cell" title={c.callerId}>{c.callerId}</td>
-                            <td style={{ fontSize: '0.82em', color: 'var(--text-muted)' }}>{c.callerType}</td>
-                            <td className="num">{fmtNum(c.requests)}</td>
-                            <td className="num">{dayTotal > 0 ? fmtPct(c.requests / dayTotal) : '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
                   </div>
-                )}
-              </div>
-            );
-          })}
+                  <div className="days-env-tile-pct" style={{ color: 'var(--text-muted)' }}>
+                    {nl.tenantPool > 0 ? `${fmtPct(envPct)} of pool` : `${fmtPct(env.totalRequests / Math.max(dayTotal, 1))} of day`}
+                  </div>
+                  {/* Mini bar */}
+                  <div className="days-env-tile-bar-track">
+                    <div className="days-env-tile-bar-fill" style={{ width: `${barW}%`, background: clr }} />
+                  </div>
+                  <div className="days-env-tile-callers">{env.callers.length} caller{env.callers.length !== 1 ? 's' : ''} · click to expand</div>
+
+                  {/* Expanded caller table */}
+                  {isOpen && (
+                    <div className="days-env-tile-detail" onClick={e => e.stopPropagation()}>
+                      <table className="breakdown-table" style={{ marginTop: 8 }}>
+                        <thead>
+                          <tr>
+                            <th>Caller ID</th>
+                            <th>Type</th>
+                            <th className="num">Requests</th>
+                            <th className="num">% of Day</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {env.callers.map(c => (
+                            <tr key={c.callerId}>
+                              <td className="caller-cell" title={c.callerId}>{c.callerId}</td>
+                              <td style={{ fontSize: '0.82em', color: 'var(--text-muted)' }}>{c.callerType}</td>
+                              <td className="num">{fmtNum(c.requests)}</td>
+                              <td className="num">{dayTotal > 0 ? fmtPct(c.requests / dayTotal) : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       ) : (
         /* ── Day list ── */
@@ -193,7 +230,9 @@ export default function DaysView({ analysis: nl, rawRows }: DaysViewProps) {
           <div style={{ marginBottom: 16 }}>
             <h2 style={{ margin: '0 0 4px' }}>📅 Daily Consumption</h2>
             <p style={{ margin: 0, fontSize: '0.85em', color: 'var(--text-muted)' }}>
-              {sortedDays.length} days · Pool: {fmtNum(nl.tenantPool)} req/day  ·  Click a row to see callers by environment
+              {sortedDays.length} days · Pool: {fmtNum(nl.tenantPool)} req/day
+              {addonPrice > 0 && ` · PPR add-on: ${fmtCur(addonPrice)}/mo per 50k`}
+              {' · Click a row to see environments'}
             </p>
           </div>
 
@@ -206,6 +245,7 @@ export default function DaysView({ analysis: nl, rawRows }: DaysViewProps) {
                   <th className="num">Total Requests</th>
                   {nl.tenantPool > 0 && <th className="num">% of Pool</th>}
                   {nl.tenantPool > 0 && <th className="num">Overrun</th>}
+                  {nl.tenantPool > 0 && addonPrice > 0 && <th className="num">PPR Cost/mo</th>}
                   <th className="num">Status</th>
                 </tr>
               </thead>
@@ -213,17 +253,18 @@ export default function DaysView({ analysis: nl, rawRows }: DaysViewProps) {
                 {sortedDays.map(day => {
                   const pct = nl.tenantPool > 0 ? day.requests / nl.tenantPool : 0;
                   const overrun = Math.max(0, day.requests - nl.tenantPool);
-                  const barW = Math.min((day.requests / Math.max(maxDay, 1)) * 100, 100);
-                  const poolMarkPct = nl.tenantPool > 0 ? Math.min((nl.tenantPool / Math.max(maxDay, 1)) * 100, 100) : 100;
-                  const color = statusColor(day.requests);
+                  const barW = Math.min((day.requests / maxDay) * 100, 100);
+                  const poolMarkPct = nl.tenantPool > 0 ? Math.min((nl.tenantPool / maxDay) * 100, 100) : 100;
                   const isOverDay = overrun > 0;
                   const isPeak = day.date === nl.peakTenantDay;
+                  const addonsNeeded = isOverDay ? Math.ceil(overrun / REQUEST_ADDON_CAPACITY) : 0;
+                  const addonCost = addonsNeeded * addonPrice;
                   return (
                     <tr
                       key={day.date}
-                      className={`breakdown-clickable ${statusClass(day.requests)}`}
-                      onClick={() => { setSelectedDate(day.date); setExpandedEnvs(new Set()); }}
-                      title="Click to see callers by environment for this day"
+                      className={`breakdown-clickable ${statusClass(pct)}`}
+                      onClick={() => navigate(day.date)}
+                      title="Click to see environments for this day"
                     >
                       <td style={{ whiteSpace: 'nowrap' }}>
                         {day.date}
@@ -231,33 +272,32 @@ export default function DaysView({ analysis: nl, rawRows }: DaysViewProps) {
                       </td>
                       <td style={{ minWidth: 200, paddingRight: 8 }}>
                         <div className="days-bar-wrap">
-                          {/* Pool cap marker */}
                           {nl.tenantPool > 0 && (
-                            <div
-                              className="days-pool-marker"
-                              style={{ left: `${poolMarkPct}%` }}
-                              title={`Pool cap: ${fmtNum(nl.tenantPool)}`}
-                            />
+                            <div className="days-pool-marker" style={{ left: `${poolMarkPct}%` }} title={`Pool cap: ${fmtNum(nl.tenantPool)}`} />
                           )}
-                          {/* Usage bar */}
                           <div
                             className="days-bar-fill"
                             style={{
                               width: `${barW}%`,
                               background: isOverDay
                                 ? `linear-gradient(to right, #3fb950 ${poolMarkPct}%, #da3633 ${poolMarkPct}%)`
-                                : color,
+                                : statusColor(pct),
                             }}
                           />
                         </div>
                       </td>
                       <td className="num">{fmtNum(day.requests)}</td>
                       {nl.tenantPool > 0 && (
-                        <td className="num" style={{ color }}>{fmtPct(pct)}</td>
+                        <td className="num" style={{ color: statusColor(pct) }}>{fmtPct(pct)}</td>
                       )}
                       {nl.tenantPool > 0 && (
                         <td className="num" style={{ color: isOverDay ? 'var(--red)' : 'var(--text-muted)' }}>
                           {isOverDay ? `+${fmtNum(overrun)}` : '—'}
+                        </td>
+                      )}
+                      {nl.tenantPool > 0 && addonPrice > 0 && (
+                        <td className="num" style={{ color: isOverDay ? 'var(--accent)' : 'var(--text-muted)' }}>
+                          {isOverDay && addonCost > 0 ? fmtCur(addonCost) : '—'}
                         </td>
                       )}
                       <td className="num">

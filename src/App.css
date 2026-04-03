@@ -544,7 +544,153 @@ main {
   margin-left: 4px;
 }
 
-/* Day drill-down env cards */
+/* ── Day drill-down navigation bar ── */
+.days-nav-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.days-nav-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  justify-content: center;
+}
+.days-nav-date {
+  margin: 0;
+  font-size: 1.1em;
+}
+.days-nav-spacer { flex: 1; }
+.days-nav-btn {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 0.85em;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.days-nav-btn:hover:not(:disabled) { background: rgba(255,255,255,0.07); }
+.days-nav-btn:disabled { opacity: 0.35; cursor: default; }
+.days-nav-arrow {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 12px;
+  font-size: 1.3em;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.days-nav-arrow:hover:not(:disabled) { background: rgba(255,255,255,0.07); }
+.days-nav-arrow:disabled { opacity: 0.35; cursor: default; }
+
+/* ── Day KPI strip ── */
+.days-day-kpis {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 20px;
+}
+.days-day-kpi {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.days-day-kpi-val {
+  font-size: 1.3em;
+  font-weight: 700;
+  color: var(--text);
+}
+.days-day-kpi-lbl {
+  font-size: 0.75em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── Day drill-down env tile grid ── */
+.days-env-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.days-env-tile {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.days-env-tile:hover { background: rgba(255,255,255,0.04); }
+.days-env-tile-open {
+  border-color: var(--accent);
+  background: rgba(255,255,255,0.03);
+  grid-column: 1 / -1;
+}
+.days-env-tile-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.days-env-tile-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.days-env-tile-name {
+  font-weight: 600;
+  font-size: 0.88em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.days-env-tile-val {
+  font-size: 1.25em;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.days-env-tile-pct {
+  font-size: 0.78em;
+  margin-bottom: 8px;
+}
+.days-env-tile-bar-track {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.days-env-tile-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  min-width: 2px;
+  transition: width 0.3s;
+}
+.days-env-tile-callers {
+  font-size: 0.75em;
+  color: var(--text-muted);
+}
+.days-env-tile-detail {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+/* Day drill-down env cards (kept for reference) */
 .days-env-card {
   background: var(--card);
   border: 1px solid var(--border);

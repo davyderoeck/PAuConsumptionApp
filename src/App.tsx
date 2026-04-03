@@ -36,7 +36,7 @@ function App() {
   const [patternFilter, setPatternFilter] = useState<string[]>([])
   const [fileType, setFileType] = useState<FileType>('per-user')
   const [tenantEntitlement, setTenantEntitlement] = useState<number | undefined>(undefined)
-  const [tenantPoolConfig, setTenantPoolConfig] = useState<TenantPoolConfig>({ requestAddonPrice: 0 })
+  const [tenantPoolConfig, setTenantPoolConfig] = useState<TenantPoolConfig>({ requestAddonPrice: 55 })
   const [nonLicensedAnalysis, setNonLicensedAnalysis] = useState<NonLicensedTenantAnalysis | null>(null)
 
   const handleFileSelected = useCallback(async (file: File) => {
@@ -313,7 +313,7 @@ function App() {
               )}
 
               {activeView === 'days' && nonLicensedAnalysis && (
-                <DaysView analysis={nonLicensedAnalysis} rawRows={rawRows} />
+                <DaysView analysis={nonLicensedAnalysis} rawRows={rawRows} addonPrice={tenantPoolConfig.requestAddonPrice} />
               )}
             </>
           )}
